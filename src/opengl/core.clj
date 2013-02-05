@@ -238,11 +238,22 @@
           context
           (range (:ncolors context))))
 
-(defn bmp-read-file [^String file]
+(defn bmp-save-file-ref [file context]
+  (assoc context :file file))
+
+(defn bmp-meta-read-file [^String file]
   (let [buffer (get-byte-buffer file)]
     (->> {:color-table []}
          (bmp-read-header buffer)
          (bmp-validate-header)
          (bmp-read-dib buffer)
          (bmp-validate-dib)
-         (bmp-read-color-table buffer))))
+         (bmp-read-color-table buffer)
+         (bmp-save-file-ref file))))
+
+(defn bmp-buffer-at-data [metadata]
+  (let [buffer (get-byte-buffer (:file metadata))]
+    (.position buffer (:start-offset metadata))))
+
+; This will eventually wrap BMPs
+(defn bmp-byte-buffer-lens [metadata] nil)
