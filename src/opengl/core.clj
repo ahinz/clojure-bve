@@ -67,6 +67,9 @@
 (defn b3d-parse-face-line [line]
   (b3d-parse-prefix-line line "Face"))
 
+(defn b3d-parse-face-2-line [line]
+  (b3d-parse-prefix-line line "Face2"))
+
 (defn b3d-get-vertex [context n]
   (let [verts (:verts (:active context))
         len (count verts)]
@@ -85,7 +88,7 @@
         (println "WARNING: (Line " (:linenum context) "): " (:line context) " ; Invalid Coordinate")
         context))))
 
-(defn b3d-push-face [context face-verts]
+(defn b3d-push-face [context face-verts two-sided?]
   (let [face-v (doall (filter (comp not nil?) (map #(b3d-get-vertex context %) face-verts)))
         face (Face. face-v (:transp (:active context)))
         mesh (:active context)
@@ -120,7 +123,8 @@
      (b3d-push-mesh-builder context)
 
      (starts-with line "Vertex") (b3d-push-vertex context (b3d-parse-vertex-line line))
-     (starts-with line "Face") (b3d-push-face context (b3d-parse-face-line line))
+     (starts-with line "Face") (b3d-push-face context (b3d-parse-face-line line) true)
+     (starts-with line "Face2") (b3d-push-face context (b3d-parse-face-2-line line) false)
      (starts-with line "Color") (b3d-set-active-color context (b3d-parse-color-line line))
      (starts-with line "Transparent") (b3d-set-transp-color context (b3d-parse-transp-line line))
 
@@ -158,7 +162,7 @@
         result (handle-lines reader {} 0)]
     (if (:error result)
       {:error (:error result)}
-      {(.substring file-name 0 (- (count file-name) 4)) (:meshes result)}
+      (:meshes result)
     )))
 
 (defn parse-object-folder [^String folder-path]
