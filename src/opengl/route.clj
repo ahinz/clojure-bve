@@ -44,14 +44,14 @@
 (defn- convert-node-to-error [node descr]
   (assoc node :type :parse-error :description descr))
 
-(defn- create-error [line idx file descr]
-  (create-node :parse-error line idx file { :description descr}))
-
 (defn- create-node [type line idx file stuff]
   (merge
    {:type type
     :fileinfo { :line line :file file :line-num (+ 1 idx) }}
    stuff))
+
+(defn- create-error [line idx file descr]
+  (create-node :parse-error line idx file { :description descr}))
 
 (defn is-type [node type]
   (= (:type node) type))
@@ -128,22 +128,6 @@
    :else
    (create-error line idx file "Could not parse line")))
 
-(defn parse-route-file [^String file-path]
-  (let [nodes (filter
-               (comp not nil?)
-               (flatten
-                (map-indexed (fn [idx itm]
-                               (parse-route-line idx (strip-comment itm) file-path))
-                             (.split (slurp file-path) "\n"))))
-        context {:nodes nodes :symbol-table {} :errors []}]
-    (-> context
-        update-prefixes
-        update-track-refs
-        validate-commands-have-prefixes
-        validate-track-commands-have-refs
-        load-structure
-        )))
-
 (defn- update-prefix-if-needed [token last-with]
   (if (and last-with (not (:prefix token)))
     (assoc token :prefix last-with)
@@ -176,10 +160,6 @@
                     node))
                 nodes))))
 
-                                        ;(def p (parse-route-file "Flushing/test.csv"))
-;; Phase 1:
-;; Apply Track Refs and With Statements
-;; Validation requires that no command be missing a prefix
 (defn- update-prefixes [context]
   (let [nodes (:nodes context)]
     (assoc context :nodes
@@ -202,6 +182,27 @@
                     [nil []]
                     nodes)))))
 
+
+(defn parse-route-file [^String file-path]
+  (let [nodes (filter
+               (comp not nil?)
+               (flatten
+                (map-indexed (fn [idx itm]
+                               (parse-route-line idx (strip-comment itm) file-path))
+                             (.split (slurp file-path) "\n"))))
+        context {:nodes nodes :symbol-table {} :errors []}]
+    (-> context
+        update-prefixes
+        update-track-refs
+        validate-commands-have-prefixes
+        validate-track-commands-have-refs
+        load-structure
+        )))
+
+                                        ;(def p (parse-route-file "Flushing/test.csv"))
+;; Phase 1:
+;; Apply Track Refs and With Statements
+;; Validation requires that no command be missing a prefix
 
 (defn print-errors [tokens]
   (doseq [t tokens]
