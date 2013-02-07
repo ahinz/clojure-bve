@@ -214,6 +214,11 @@
              (bmp-v #(= 0 (:compression %)) "Expected no compression types supported")])
     context))
 
+(defn bmp-update-ncolors [context]
+  (if (= 0 (:ncolors context))
+    (assoc context :ncolors (int (Math/pow 2 (:color-depth context))))
+    context))
+
 (defn bmp-read-dib [buffer context]
   (if (not (:error context))
     (assoc context
@@ -251,6 +256,7 @@
          (bmp-read-header buffer)
          (bmp-validate-header)
          (bmp-read-dib buffer)
+         (bmp-update-ncolors)
          (bmp-validate-dib)
          (bmp-read-color-table buffer)
          (bmp-save-file-ref file))))
@@ -274,7 +280,7 @@
     (if (= (count color-table) 0)
       buffer
       (doseq [i (range (/ arraysize 4))]
-        (let [[b1 b2 b3 b4] (nth color-table (.get buffer))
+        (let [[b1 b2 b3 b4] (nth color-table (bit-and (short (.get buffer)) 0xff))
               x (* i 4)]
           (aset-byte array x b1)
           (aset-byte array (+ x 1) b1)
