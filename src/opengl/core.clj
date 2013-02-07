@@ -217,17 +217,17 @@
 (defn bmp-read-dib [buffer context]
   (if (not (:error context))
     (assoc context
-     :dib-size (.getInt buffer)
-     :width (.getInt buffer)
-     :height (.getInt buffer)
-     :color-planes (.getShort buffer)
-     :color-depth (.getShort buffer)
-     :compression (.getInt buffer)
-     :image-size (.getInt buffer)
-     :horiz-res (.getInt buffer)
-     :vert-res (.getInt buffer)
-     :ncolors (.getInt buffer)
-     :nimport (.getInt buffer))
+      :dib-size (.getInt buffer)
+      :width (.getInt buffer)
+      :height (.getInt buffer)
+      :color-planes (.getShort buffer)
+      :color-depth (.getShort buffer)
+      :compression (.getInt buffer)
+      :image-size (.getInt buffer)
+      :horiz-res (.getInt buffer)
+      :vert-res (.getInt buffer)
+      :ncolors (.getInt buffer)
+      :nimport (.getInt buffer))
     context))
 
 (defn bmp-read-color-table-color [buffer]
@@ -271,13 +271,15 @@
         buffer (bmp-buffer-at-data metadata)
         arraysize (* (:height metadata) (:width metadata) 4)
         array (byte-array arraysize)]
-    (doseq [i (range (/ arraysize 4))]
-      (let [[b1 b2 b3 b4] (nth color-table (.get buffer))
-            x (* i 4)]
-        (aset-byte array x b1)
-        (aset-byte array (+ x 1) b1)
-        (aset-byte array (+ x 2) b2)
-        (aset-byte array (+ x 3) b3)))
+    (if (= (count color-table) 0)
+      buffer
+      (doseq [i (range (/ arraysize 4))]
+        (let [[b1 b2 b3 b4] (nth color-table (.get buffer))
+              x (* i 4)]
+          (aset-byte array x b1)
+          (aset-byte array (+ x 1) b1)
+          (aset-byte array (+ x 2) b2)
+          (aset-byte array (+ x 3) b3))))
     array))
 
 (defn bmp-data-into-buffer [metadata]

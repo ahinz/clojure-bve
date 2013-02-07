@@ -71,7 +71,8 @@
     (gl-disable-texture-if-needed gl texture)
     textures))
 
-(def q-mesh (first (core/b3d-parse-file (java.io.File. "Flushing/Speed30.b3d"))))
+;(def q-mesh (first (core/b3d-parse-file (java.io.File. "Flushing/Speed30.b3d"))))
+(def q-mesh (first (core/b3d-parse-file (java.io.File. "Flushing/bldg17.b3d"))))
 
 (defn create-event-proxy [w h]
   (proxy [GLEventListener] []
@@ -79,16 +80,16 @@
       (let [gl (.getGL drawable)
             glu (GLUgl2.)]
         ;(.gluOrtho2D glu 0.0 450.0 0.0 375.0)
-        (.gluOrtho2D glu 0.0 1.0 1.0 0.0)
+        (.gluOrtho2D glu 0.0 30.0 30.0 0.0)
         (doto gl
           (.glClear GL/GL_COLOR_BUFFER_BIT)
-          (.glBegin GL2/GL_POLYGON)
-          (.glVertex2f 0.300 0.50)
-          (.glVertex2f 0.350 0.60)
-          (.glVertex2f 0.375 0.100)
-          (.glVertex2f 0.325 0.115)
-          (.glVertex2f 0.300 0.75)
-          (.glEnd)
+          ;; (.glBegin GL2/GL_POLYGON)
+          ;; (.glVertex2f 0.300 0.50)
+          ;; (.glVertex2f 0.350 0.60)
+          ;; (.glVertex2f 0.375 0.100)
+          ;; (.glVertex2f 0.325 0.115)
+          ;; (.glVertex2f 0.300 0.75)
+          ;; (.glEnd)
           (gl-render-mesh q-mesh {})
           )))
     (displayChanged [drawable modeChanged deviceChanged] (println "DC"))
