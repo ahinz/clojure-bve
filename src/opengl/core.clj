@@ -12,7 +12,7 @@
 (defrecord Face [verts transp])
 (defrecord Mesh [faces color texture texture-coords])
 
-(defrecord TextureCoord [vertext x y])
+(defrecord TextureCoord [vertex x y])
 
 (defmethod clojure.core/print-method Mesh [x writer]
   (.write writer (str "#Mesh(" (count (:faces x)) " face" (if (not= 1 (count (:faces x))) "s")
@@ -31,7 +31,7 @@
       context)))
 
 (defn b3d-push-mesh-builder [context]
-  (assoc (b3d-save-active-mesh context) :active {:verts [] :faces [] :texture-coords []}))
+  (assoc (b3d-save-active-mesh context) :active {:verts [] :faces [] :texture-coords {}}))
 
 (defn b3d-set-error [context err]
   (assoc context :error err))
@@ -51,7 +51,7 @@
   (b3d-assoc-active context :transp color))
 
 (defn b3d-set-texture-path [context path]
-  (b3d-assoc-active context :texture-path path))
+  (b3d-assoc-active context :texture-path (str (:path context) java.io.File/separator  path)))
 
 ;; TODO- Explicitly reject nighttime textures for now
 (defn b3d-parse-load [line]
@@ -83,7 +83,7 @@
   (let [tcoords (:texture-coords (:active context))
         vertex (b3d-get-vertex context v)]
     (if vertex
-      (b3d-assoc-active context :texture-coords (conj tcoords (TextureCoord. vertex x y)))
+      (b3d-assoc-active context :texture-coords (assoc tcoords vertex [x y]))
       (do
         (println "WARNING: (Line " (:linenum context) "): " (:line context) " ; Invalid Coordinate")
         context))))
@@ -159,7 +159,7 @@
 (defn b3d-parse-file [^java.io.File file]
   (let [file-name (.getName file)
         reader (java.io.BufferedReader. (java.io.InputStreamReader. (java.io.FileInputStream. file)))
-        result (handle-lines reader {} 0)]
+        result (handle-lines reader { :path (.getParent file) } 0)]
     (if (:error result)
       {:error (:error result)}
       (:meshes result)
@@ -259,5 +259,26 @@
   (let [buffer (get-byte-buffer (:file metadata))]
     (.position buffer (:start-offset metadata))))
 
-; This will eventually wrap BMPs
-(defn bmp-byte-buffer-lens [metadata] nil)
+(defn color3f-as-int [[c1 c2 c3 c4]]
+  (bit-or
+   (bit-shift-left c1 24)
+   (bit-shift-left c2 16)
+   (bit-shift-left c3 8)
+   c4))
+
+(defn bmp-data-into-array [metadata]
+  (let [color-table (:color-table metadata)
+        buffer (bmp-buffer-at-data metadata)
+        arraysize (* (:height metadata) (:width metadata) 4)
+        array (byte-array arraysize)]
+    (doseq [i (range (/ arraysize 4))]
+      (let [[b1 b2 b3 b4] (nth color-table (.get buffer))
+            x (* i 4)]
+        (aset-byte array x b1)
+        (aset-byte array (+ x 1) b1)
+        (aset-byte array (+ x 2) b2)
+        (aset-byte array (+ x 3) b3)))
+    array))
+
+(defn bmp-data-into-buffer [metadata]
+  (java.nio.ByteBuffer/wrap (bmp-data-into-array metadata)))
