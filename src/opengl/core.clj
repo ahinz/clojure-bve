@@ -251,11 +251,16 @@
 (defn bmp-append-color-to-color-table [context color]
   (assoc context :color-table (conj (:color-table context) color)))
 
+; if the data starts at 54 bytes
+; 14 byte BMP header + 40 byte dib header
+; then *don't* read a color table
 (defn bmp-read-color-table [buffer context]
-  (reduce (fn [ctxt _]
-            (bmp-append-color-to-color-table ctxt (bmp-read-color-table-color buffer)))
-          context
-          (range (:ncolors context))))
+  (if (= 54 (:start-offset context))
+    context
+    (reduce (fn [ctxt _]
+              (bmp-append-color-to-color-table ctxt (bmp-read-color-table-color buffer)))
+            context
+            (range (:ncolors context)))))
 
 (defn bmp-save-file-ref [file context]
   (assoc context :file file))
