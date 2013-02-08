@@ -3,7 +3,12 @@
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :aot [opengl.core]
+  :aot [opengl.core
+        opengl.builder
+        opengl.geom
+        opengl.models
+        opengl.opengl
+        opengl.route]
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [org.clojars.toxi/jogl "2.0.0-rc10"]
                  ])
