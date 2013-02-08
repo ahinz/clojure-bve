@@ -46,7 +46,9 @@
 
 (defn gl-enable-texture-2d [gl]
   (println-d ".glEnable T2D")
-  (.glEnable gl GL/GL_TEXTURE_2D))
+  (.glEnable gl GL/GL_TEXTURE_2D)
+  ;(.glTexEnv gl GL2/GL_TEXTURE_ENV GL2/GL_TEXTURE_ENV_MODE GL2/GL_MODULATE)
+  )
 
 (defn gl-bind-current-texture [gl texture]
   (let [tid (:gl-tid texture)]
@@ -110,8 +112,8 @@
       (let [[r g b] color]
         (.glColor3f gl r g b)))
 
-    (.glPolygonMode gl GL/GL_FRONT GL2GL3/GL_LINE)
-    (.glPolygonMode gl GL/GL_BACK  GL2GL3/GL_LINE)
+    (.glPolygonMode gl GL/GL_FRONT_AND_BACK GL2GL3/GL_LINE)
+    ;(.glPolygonMode gl GL/GL_BACK  GL2GL3/GL_FILL)
 
     (.glBegin gl GL2/GL_POLYGON)
 
@@ -158,8 +160,22 @@
 (def s (:symbol-table r))
 (def bv (builder/build-block-vector (:nodes r) 25))
 (def iblock (nth bv 3))
+(def ctxt
+  {:rails
+   {0 {:offset [0.0 0.0]
+       :type (get s "rail9")}
+    1 {:offset [-12.0 0.0]
+       :type (get s "rail8")}}
+
+   :walls
+   [{:type (get s "walll5")
+     :rail 0 }
+    {:type (get s "wallr5")
+     :rail 1}
+    ]})
+
 (def objs
-  (apply concat (builder/create-objects-for-block iblock s (geom/transform-create 0 0 0) [0 0 0] [0 0 0])))
+  (apply concat (builder/create-objects-for-block ctxt iblock s (geom/transform-create 0 0 0) [0 0 0] [0 0 0])))
 
 
 (defn gl-draw-axis [gl]
@@ -203,7 +219,7 @@
          (ref-set textures {}))
 
         (.glLoadIdentity gl)
-        (.gluPerspective glu (Float. 25.0) 1.0 10.0 200.0)
+        (.gluPerspective glu (Float. 25.0) 1.0 10.0 800.0)
         (apply glu-look-at
                (concat [glu]
                        (:eye camera) (:center camera) [0.0 1.0 0.0]))
@@ -269,4 +285,4 @@
       (assoc context :camera updated-camera))))
   '())
 
-(set-looking-at canvas 20.0 20.0 -30.0)
+(set-looking-at canvas 20.0 20.0 -50.0)
