@@ -1,16 +1,31 @@
 (ns opengl.core
+  [:require
+   [opengl.models :as m]]
   (:gen-class))
 
-(defrecord V3f [^float x ^float y ^float z])
-(defn V3f-make [x y z] (V3f. x y z))
-
-(defrecord Color4f [^float r ^float g ^float b ^float a])
-(defn Color4f-make
-  ([r g b] (Color4f. r g b 255))
-  ([r g b a] (Color4f. r g b a)))
-
 (defrecord Face [verts transp])
-(defrecord Mesh [faces color texture texture-coords])
+(defrecord Mesh [verts faces color texture texture-coords])
+
+(defn validate-mesh [ast-mesh]
+  ; validate texture coord refs here
+  true)
+
+(defn create-mesh [ast-mesh]
+  (let [color (:color ast-mesh)
+        texture (:texture ast-mesh)
+        colors (m/create-color-set color nil nil) ;;TODO support transparent and emissive color
+        textures (m/create-texture-set texture nil 0.0) ;;TODO support blend and nightitme textures
+        material (m/create-material colors textures)
+        tcoords (:texture-coords ast-mesh)
+        verts (:verts ast-mesh)
+        faces (:faces ast-mesh)
+        updated-verts (map-indexed
+                       (fn [idx ver] (m/create-vertex ver (get tcoords idx))) verts)]
+    (map (fn [face]
+           (m/create-face
+            (map #(nth updated-verts %) (:verts face))
+            material))
+         faces)))
 
 (defrecord TextureCoord [vertex x y])
 
@@ -19,7 +34,7 @@
                       " Textures: " (:texture x) " (" (count (:texture-coords x)) "))")))
 
 (defn b3d-build-mesh [mesh]
-  (Mesh. (:faces mesh) (:color mesh) (:texture-path mesh) (:texture-coords mesh)))
+  (Mesh. (:verts mesh) (:faces mesh) (:color mesh) (:texture-path mesh) (:texture-coords mesh)))
 
 (defn b3d-save-active-mesh [context]
   (let [mesh (:active context)
@@ -62,7 +77,7 @@
     (b3d-assoc-active context :verts (conj verts vertex))))
 
 (defn b3d-parse-vertex-line [line]
-  (apply V3f-make (b3d-parse-prefix-line line "Vertex")))
+  (b3d-parse-prefix-line line "Vertex"))
 
 (defn b3d-parse-face-line [line]
   (b3d-parse-prefix-line line "Face"))
@@ -80,26 +95,21 @@
       (nth verts n))))
 
 (defn b3d-push-texture-coordinate [context [v x y]]
-  (let [tcoords (:texture-coords (:active context))
-        vertex (b3d-get-vertex context v)]
-    (if vertex
-      (b3d-assoc-active context :texture-coords (assoc tcoords vertex [x y]))
-      (do
-        (println "WARNING: (Line " (:linenum context) "): " (:line context) " ; Invalid Coordinate")
-        context))))
+  (let [tcoords (:texture-coords (:active context))]
+    (b3d-assoc-active context :texture-coords (assoc tcoords v [x y]))))
 
 (defn b3d-push-face [context face-verts two-sided?]
-  (let [face-v (doall (filter (comp not nil?) (map #(b3d-get-vertex context %) face-verts)))
-        face (Face. face-v (:transp (:active context)))
+  (let [
+        face (Face. face-verts (:transp (:active context)))
         mesh (:active context)
         faces (:faces mesh)]
     (b3d-assoc-active context :faces (conj (:faces mesh) face))))
 
 (defn b3d-parse-color-line [line]
-  (apply Color4f-make (b3d-parse-prefix-line line "Color")))
+  (b3d-parse-prefix-line line "Color"))
 
 (defn b3d-parse-transp-line [line]
-  (apply Color4f-make (b3d-parse-prefix-line line "Transparent")))
+  (b3d-parse-prefix-line line "Transparent"))
 
 (defn b3d-set-active-color [context color]
   (let [mesh (:active context)
@@ -162,7 +172,7 @@
         result (handle-lines reader { :path (.getParent file) } 0)]
     (if (:error result)
       {:error (:error result)}
-      (:meshes result)
+      (map create-mesh (:meshes result))
     )))
 
 (defn parse-object-folder [^String folder-path]
@@ -274,18 +284,39 @@
 
 (defn bmp-data-into-array [metadata]
   (let [color-table (:color-table metadata)
+        depth (:color-depth metadata)
         buffer (bmp-buffer-at-data metadata)
         arraysize (* (:height metadata) (:width metadata) 4)
         array (byte-array arraysize)]
     (if (= (count color-table) 0)
       buffer
-      (doseq [i (range (/ arraysize 4))]
-        (let [[b1 b2 b3 b4] (nth color-table (bit-and (short (.get buffer)) 0xff))
-              x (* i 4)]
-          (aset-byte array x b1)
-          (aset-byte array (+ x 1) b1)
-          (aset-byte array (+ x 2) b2)
-          (aset-byte array (+ x 3) b3))))
+      (cond
+       (= depth 8)
+       (doseq [i (range (/ arraysize 4))]
+         (let [[b1 b2 b3 b4] (nth color-table (bit-and (short (.get buffer)) 0xff))
+               x (* i 4)]
+           (aset-byte array x b1)
+           (aset-byte array (+ x 1) b1)
+           (aset-byte array (+ x 2) b2)
+           (aset-byte array (+ x 3) b3)))
+
+       (= depth 4)
+       (doseq [i (range (/ arraysize 8))]
+         (let [byte (bit-and (short (.get buffer)) 0xff)
+               color-idx-1 (bit-and byte 0xf)
+               color-idx-2 (bit-and (bit-shift-right byte 4) 0xf)
+               [b1 b2 b3 b4] (nth color-table color-idx-1)
+               [b5 b6 b7 b8] (nth color-table color-idx-2)
+               x (* i 8)]
+           (aset-byte array x b1)
+           (aset-byte array (+ x 1) b1)
+           (aset-byte array (+ x 2) b2)
+           (aset-byte array (+ x 3) b3)
+           (aset-byte array (+ x 4) b1)
+           (aset-byte array (+ x 5) b1)
+           (aset-byte array (+ x 6) b2)
+           (aset-byte array (+ x 7) b3)))
+       :else (throw (Exception. "Bad color depth"))))
     array))
 
 (defn bmp-data-into-buffer [metadata]

@@ -2,10 +2,16 @@
   [:require [opengl.core :as core]]
   (:gen-class))
 
+(defn- strip-comment [line]
+  (let [idx (.indexOf line ";")]
+    (if (> 0 idx)
+      line
+      (.substring line 0 idx))))
+
 (defn- append-file-parse-error [context str]
   (assoc context :errors (conj (context :errors) str)))
 
-(defn- resolve-symbol-table [context]
+(defn resolve-symbol-table [context]
   (let [symbol-table (:symbol-table context)]
     (reduce (fn [context [k v]]
               (try
@@ -22,11 +28,16 @@
 (defn- insert-into-symbol-table [context command index file]
   (let [symbol-table (:symbol-table context)]
     (assoc context :symbol-table
-           (assoc symbol-table index file))))
+           (assoc symbol-table (str command index) file))))
 
-(defn- trim-trailing-comma [s]
+(defn trim-trailing-comma [s]
   (if (= \, (last s))
     (.substring s 0 (- (count s) 1))
+    s))
+
+(defn trim-forward-slash [s]
+  (if (= (first s) \/)
+    (.substring s 1)
     s))
 
 (defn- load-structure [context]
@@ -35,7 +46,9 @@
      (insert-into-symbol-table context
                                (:type node)
                                (:arg node)
-                               (trim-trailing-comma (.trim (.replaceAll (:body node) "\\\\" "/")))))
+                               (strip-comment
+                                (trim-forward-slash
+                                 (trim-trailing-comma (.trim (.replaceAll (:body node) "\\\\" "/")))))))
    context
    (filter
     #(.equalsIgnoreCase (:prefix %) "structure")
@@ -94,16 +107,9 @@
   (let [[_ pfx _ cmd _ arg sfx rest] (prefixed-line line)
         cmd (.trim (.toLowerCase cmd))]
     (if (some #{cmd} allowed-commands)
-     (create-node cmd line line-num file { :prefix pfx :body rest :arg arg :suffix sfx})
-     (create-error line line-num file (str "Unknown Command: " cmd)))
-    ;
+      (create-node cmd line line-num file { :prefix pfx :body rest :arg arg :suffix sfx})
+      (create-error line line-num file (str "Unknown Command: " cmd)))
     ))
-
-(defn- strip-comment [line]
-  (let [idx (.indexOf line ";")]
-    (if (> 0 idx)
-      line
-      (.substring line 0 idx))))
 
 (defn- parse-route-line [idx line file]
   (cond
@@ -188,7 +194,7 @@
                (comp not nil?)
                (flatten
                 (map-indexed (fn [idx itm]
-                               (parse-route-line idx (strip-comment itm) file-path))
+                               (parse-route-line idx itm file-path))
                              (.split (slurp file-path) "\n"))))
         context {:nodes nodes :symbol-table {} :errors []}]
     (-> context
@@ -199,10 +205,6 @@
         load-structure
         )))
 
-                                        ;(def p (parse-route-file "Flushing/test.csv"))
-;; Phase 1:
-;; Apply Track Refs and With Statements
-;; Validation requires that no command be missing a prefix
 
 (defn print-errors [tokens]
   (doseq [t tokens]
