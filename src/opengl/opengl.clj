@@ -144,7 +144,7 @@
        not-loaded-files texture-ids))))
 
 (defn gl-render-mesh [gl mesh]
-  (doseq [face mesh]
+  (doseq [face (:faces mesh)]
     (gl-preload-textures gl
      (filter identity
              (flatten
@@ -154,29 +154,6 @@
 ;(def q-mesh (core/b3d-parse-file (java.io.File. "Flushing/Speed30.b3d")))
 ;(def q-mesh (core/b3d-parse-file (java.io.File. "Flushing/bldg17.b3d")))
 ;(def q-mesh (core/b3d-parse-file (java.io.File. "Flushing/SheaStadium.b3d")))
-(def r
-  (route/resolve-symbol-table
-   (route/parse-route-file "Flushing/test.csv")))
-(def s (:symbol-table r))
-(def bv (builder/build-block-vector (:nodes r) 25))
-(def iblock (nth bv 3))
-(def ctxt
-  {:rails
-   {0 {:offset [0.0 0.0]
-       :type (get s "rail9")}
-    1 {:offset [-12.0 0.0]
-       :type (get s "rail8")}}
-
-   :walls
-   [{:type (get s "walll5")
-     :rail 0 }
-    {:type (get s "wallr5")
-     :rail 1}
-    ]})
-
-(def objs
-  (apply concat (builder/create-objects-for-block ctxt iblock s (geom/transform-create 0 0 0) [0 0 0] [0 0 0])))
-
 
 (defn gl-draw-axis [gl]
   (doto gl
@@ -197,7 +174,7 @@
 (def gl-context
   (ref {:camera {:eye [100.0 30.0 130.0]
                  :center [0.0 0.0 0.0]}
-        :meshes (filter identity objs)
+        :meshes (filter identity builder/objs)
     }))
 
 (defn glu-look-at [glu ex ey ez cx cy cz ux uy uz]
@@ -224,8 +201,9 @@
                (concat [glu]
                        (:eye camera) (:center camera) [0.0 1.0 0.0]))
 
-        (doseq [mesh objs]
-          (gl-render-mesh gl mesh))
+        (doseq [meshes-from-b3d objs]
+          (doseq [mesh meshes-from-b3d]
+            (gl-render-mesh gl mesh)))
 
         (gl-draw-axis gl)))
     (displayChanged [drawable modeChanged deviceChanged] (println "DC"))
@@ -272,8 +250,8 @@
     [canvas frame]))
 
 (def canvas (first (make-canvas)))
-(def anim (FPSAnimator. canvas 10))
-(.start anim)
+;(def anim (FPSAnimator. canvas 1))
+;(.start anim)
 
 (defn set-looking-at [canvas ex ey ez]
   (dosync

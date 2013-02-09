@@ -21,11 +21,12 @@
         faces (:faces ast-mesh)
         updated-verts (map-indexed
                        (fn [idx ver] (m/create-vertex ver (get tcoords idx))) verts)]
-    (map (fn [face]
-           (m/create-face
-            (map #(nth updated-verts %) (:verts face))
-            material))
-         faces)))
+    (m/create-mesh
+     (map (fn [face]
+            (m/create-face
+             (map #(nth updated-verts %) (:verts face))
+             material))
+          faces))))
 
 (defrecord TextureCoord [vertex x y])
 

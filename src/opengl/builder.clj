@@ -38,25 +38,26 @@
   [mesh [tx ty tz]
    normal-transform1
    normal-transform2]
-  (map (fn [face]
-         (let [verts
-               (map (fn [vert]
-                      (let [[x y z] (:coordinate vert)
-                            [nx ny nz] (:normal vert)
-                            [nx' ny' nz'] (geom/rotate-with-transform
-                                           (geom/rotate-with-transform
-                                             [nx ny nz] normal-transform1)
-                                           normal-transform2)]
-                        (let [v (m/create-vertex
-                                 [(+ tx x)
-                                  (+ ty y)
-                                  (+ tz z)]
-                                 (:texture-coords vert)
-                                 [nx' ny' nz'])]
-                          v)))
-                    (:verts face))]
-           (m/create-face verts (:material face))))
-       mesh))
+  (m/create-mesh
+   (map (fn [face]
+          (let [verts
+                (map (fn [vert]
+                       (let [[x y z] (:coordinate vert)
+                             [nx ny nz] (:normal vert)
+                             [nx' ny' nz'] (geom/rotate-with-transform
+                                             (geom/rotate-with-transform
+                                               [nx ny nz] normal-transform1)
+                                             normal-transform2)]
+                         (let [v (m/create-vertex
+                                  [(+ tx x)
+                                   (+ ty y)
+                                   (+ tz z)]
+                                  (:texture-coords vert)
+                                  [nx' ny' nz'])]
+                           v)))
+                     (:verts face))]
+            (m/create-face verts (:material face))))
+        (:faces mesh))))
 
 (defn create-transformed-object
   [prototype pos base-transform aux-transform track-position]
@@ -150,10 +151,73 @@
             track-pos)))
        walls))
 
+(defn fatal-error [s]
+  (throw (Exception. s)))
+
+(defn split-body [node]
+  (map read-string
+       (.split
+        (.trim (route/trim-trailing-comma (:body node))) ";")))
+
+(defn fatal-error-missing-rail [railidx node]
+  (fatal-error (str "Could not find rail index " railidx " " node)))
+
+(defn update-rail-objects-for-block
+  [context block sym-tbl]
+  (assoc
+      context :rails
+      (let [rails (:rails context)]
+        (reduce (fn [rails node]
+                  (cond
+                   (route/is-type node "railstart")
+                   (let [[railidx dx dy typ] (split-body node)]
+                     (if (get rails railidx)
+                       (fatal-error
+                        (str "Cannot start rail " railidx " because it has already been started!")))
+                     (assoc rails railidx
+                            {:offset [dx dy]
+                             :type (get sym-tbl (str "rail" railidx))}))
+
+                   (route/is-type node "railtype")
+                   (let [[railidx texture] (split-body node)
+                         rail (get rails railidx)]
+                     (if (nil? rail)
+                       (fatal-error-missing-rail railidx node))
+                     (assoc
+                         rails railidx
+                         (assoc rail :type
+                                (get sym-tbl (str "rail" railidx)))))
+
+                   (route/is-type node "railend")
+                   (fatal-error "not sure how to handle a rail end yet")
+                   :else
+                   rails))
+                rails (:nodes-in-block block)))))
+
+(defn update-context-objects-for-block
+  [context block sym-tbl]
+  (-> context
+      (update-rail-objects-for-block block sym-tbl)))
+
+(defn create-starting-context [symbol-table]
+  {:rails {0 {:offset [0.0 0.0]}}
+   :rail-transform geom/identity-transform
+   :position [0.0 0.0 0.0]
+   :direction [0.0 0.0 0.0]
+   :symbol-table symbol-table})
 
 (defn create-objects-for-block
-  [context block symbol-table rail-transform position direction]
-  (let [starting-distance (:start-ref block)
+  [context block]
+  (let [symbol-table (:symbol-table context)
+        rail-transform (:rail-transform context)
+        position (:position context)
+        direction (:direction context)
+
+        context
+        (update-context-objects-for-block
+         context block symbol-table)
+
+        starting-distance (:start-ref block)
         end-distance (:stop-ref block)
         nodes (sort-by
                #(read-string (:track-ref %))
@@ -177,7 +241,7 @@
                    (:rails context)
                    rail-transform position direction
                    starting-distance)]
-      (concat wallobjs objs railobjs)
+      [context (concat wallobjs objs railobjs)]
       )))
 
 (def r
@@ -185,6 +249,7 @@
    (route/parse-route-file "Flushing/test.csv")))
 (def s (:symbol-table r))
 (def bv (build-block-vector (:nodes r) 25))
+(def ablock (nth bv 0))
 (def iblock (nth bv 3))
 (def ctxt
   {:rails
@@ -198,4 +263,7 @@
     {:type (get s "wallr5")
      :rail 1}]})
 
-(def objs (create-objects-for-block ctxt iblock s (geom/transform-create 0 0 0) [0 0 0] [0 0 0]))
+(def ctxt (create-starting-context s))
+(def objs-and-ctxt (create-objects-for-block ctxt ablock))
+(def objs (filter identity (second objs-and-ctxt)))
+(def ctxt (first objs-and-ctxt))

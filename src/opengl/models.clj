@@ -12,6 +12,12 @@
   ([coordinate texture-coordinate normal]
      (Vertex. coordinate texture-coordinate normal)))
 
+(defrecord Mesh
+    [faces])
+
+(defn create-mesh [faces]
+  (Mesh. faces))
+
 (defrecord Face
     [verts material])
 
