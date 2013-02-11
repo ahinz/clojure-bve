@@ -3,7 +3,7 @@
    [opengl.models :as m]]
   (:gen-class))
 
-(defrecord Face [verts transp])
+(defrecord Face [verts transp two-sided])
 (defrecord Mesh [verts faces color texture texture-coords])
 
 (defn validate-mesh [ast-mesh]
@@ -25,7 +25,8 @@
      (map (fn [face]
             (m/create-face
              (map #(nth updated-verts %) (:verts face))
-             material))
+             material
+             (:two-sided face)))
           faces))))
 
 (defrecord TextureCoord [vertex x y])
@@ -101,7 +102,7 @@
 
 (defn b3d-push-face [context face-verts two-sided?]
   (let [
-        face (Face. face-verts (:transp (:active context)))
+        face (Face. face-verts (:transp (:active context)) two-sided?)
         mesh (:active context)
         faces (:faces mesh)]
     (b3d-assoc-active context :faces (conj (:faces mesh) face))))

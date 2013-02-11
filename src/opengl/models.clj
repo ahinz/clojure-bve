@@ -23,13 +23,13 @@
   (Mesh. faces))
 
 (defrecord Face
-    [verts material])
+    [verts material two-sided])
 
-(defn create-face [verts material]
-  (Face. verts material))
+(defn create-face [verts material two-sided]
+  (Face. verts material two-sided))
 
 (defn update-face [face verts]
-  (Face. verts (:material face)))
+  (Face. verts (:material face) (:two-sided face)))
 
 (defrecord ColorSet
     [color transparent emissive])

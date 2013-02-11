@@ -101,16 +101,18 @@
       (gl-enable-texture-2d gl)
       (gl-bind-current-texture gl texture-info))
 
-    (println-d ".glBegin")
-
     (if color
       (let [[r g b] color]
         (.glColor3f gl r g b))
       (.glColor3f gl 1.0 1.0 1.0))
 
+    (if (:two-sided face)
+      (.glPolygonMode gl GL/GL_FRONT_AND_BACK GL2GL3/GL_FILL)
+      (.glPolygonMode gl GL/GL_FRONT GL2GL3/GL_FILL))
+
     ;(.glPolygonMode gl GL/GL_FRONT_AND_BACK GL2GL3/GL_LINE)
     ;(.glPolygonMode gl GL/GL_FRONT_AND_BACK GL2GL3/GL_FILL)
-    (.glPolygonMode gl GL/GL_FRONT  GL2GL3/GL_FILL)
+    ;(.glPolygonMode gl GL/GL_FRONT  GL2GL3/GL_FILL)
     ;(.glPolygonMode gl GL/GL_BACK  GL2GL3/GL_LINE)
     (.glDisable gl GL/GL_BLEND)
 
@@ -119,7 +121,6 @@
     (doseq [vert verts]
       (gl-render-vertex gl vert))
 
-    (println-d ".glEnd")
     (.glEnd gl)
 
     (when (:gl-tid texture-info)
@@ -252,14 +253,6 @@
     [canvas frame]))
 
 
-;(set-looking-at canvas 20.0 20.0 -50.0)
-(set-looking-at canvas 1.0 10.0 -50.0)
-(set-center canvas 0.0 0.0 10.0)
-
-(def canvas (first (make-canvas)))
-(def anim (FPSAnimator. canvas 1))
-(.start anim)
-
 (defn set-looking-at [canvas ex ey ez]
   (dosync
    (ref-set
@@ -270,6 +263,10 @@
       (assoc context :camera updated-camera))))
   '())
 
+(def canvas (first (make-canvas)))
+(def anim (FPSAnimator. canvas 1))
+(.start anim)
+
 (defn set-center [canvas x y z]
   (dosync
    (ref-set
@@ -279,3 +276,9 @@
           updated-camera (assoc camera :center [x y z])]
       (assoc context :camera updated-camera))))
   '())
+
+;(set-looking-at canvas 20.0 20.0 -50.0)
+;(set-looking-at canvas 1.0 10.0 -50.0)
+;(set-center canvas 0.0 0.0 10.0)
+(set-center canvas 0.0 0.0 120.0)
+(set-looking-at canvas 1.0 5.0 60.0)

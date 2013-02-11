@@ -56,7 +56,7 @@
                                   [nx' ny' nz'])]
                            v)))
                      (:verts face))]
-            (m/create-face verts (:material face))))
+            (m/update-face face verts)))
         (:faces mesh))))
 
 (defn create-transformed-object
@@ -252,8 +252,6 @@
                   (when v
                     (let [[x y z] (:coordinate v)]
                       (m/update-vertex v [(- s x) y z]))))
-
-          zzzz (println neardist fardist "<---")
 
           [_ _ x2 x3 _ _ x6 x7] verts
           [x2 x3 x6 x7] [(x-sub x2 neardist)
