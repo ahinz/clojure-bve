@@ -286,5 +286,5 @@
 ;(set-center canvas 0.0 0.0 400.0)
 ;(set-looking-at canvas 1.0 5.0 -10.0)
 ;(set-looking-at canvas 1.0 5.0 50.0)
-;(set-looking-at canvas 1.0 3.0 140.0)
-(set-looking-at canvas 1.0 3.0 10.0)
+(set-looking-at canvas 1.0 3.0 110.0)
+;(set-looking-at canvas 1.0 3.0 10.0)
