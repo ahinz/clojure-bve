@@ -42,7 +42,11 @@
    (map (fn [face]
           (let [verts
                 (map (fn [vert]
-                       (let [[x y z] (:coordinate vert)
+                       (let [[x y z] (geom/rotate-with-transform
+                                       (geom/rotate-with-transform
+                                         (:coordinate vert)
+                                         normal-transform1)
+                                       normal-transform2)
                              [nx ny nz] (:normal vert)
                              [nx' ny' nz'] (geom/rotate-with-transform
                                              (geom/rotate-with-transform
@@ -73,42 +77,6 @@
 
 (defn- get-z [tx]
   (nth tx 2))
-
-
-;; (defn create-free-object [rails symbol-table node starting-distance]
-;;   (let [body (.trim (route/trim-trailing-comma (:body node)))
-;;         [railidx i dx dy yaw pitch roll] (map read-string (.split body ";"))
-;;         rail (get rails railidx)
-;;         [px py pz] (:position rail)
-;;         yaw (or yaw 0.0)
-;;         pitch (or pitch 0.0)
-;;         roll (or roll 0.0)
-
-;;         prototype (get symbol-table (str "freeobj" i))
-
-;;         track-pos (read-string (:track-ref node))
-;;         dz (- track-pos starting-distance)
-
-;;         posx (+ rx px
-;;                 (* dx (:x (get-x rt)))
-;;                 (* dy (:x (get-y rt)))
-;;                 (* dz (:x (get-z rt))))
-
-;;         posy (+ ry py
-;;                 (* dx (:y (get-x rt)))
-;;                 (* dy (:y (get-y rt)))
-;;                 (* dz (:y (get-z rt))))
-
-;;         posz (+ pz
-;;                 (* dx (:z (get-x rt)))
-;;                 (* dy (:z (get-y rt)))
-;;                 (* dz (:z (get-z rt))))]
-;;     (create-transformed-object
-;;      prototype
-;;      [posx posy posz]
-;;      rail-transformation
-;;      (geom/transform-create yaw pitch roll)
-;;      track-pos)))
 
 (defn- split-body [node]
   (map read-string
@@ -221,7 +189,8 @@
       (* dz (:z (get-z rail-transform))))])
 
 (defn annotate-block-with-freeobj-info [context block sym-tbl]
-  (let [rails (:rails block)]
+  (let [rails (:rails block)
+        rails (into {} (map (fn [[k v]] [k (assoc v :freeobjs [])]) rails))]
     (update-rails-and-block
      context
      block
@@ -247,7 +216,7 @@
                                   :pitch pitch
                                   :roll roll}))]
           (assoc rails railidx new-rail)))
-      (:rails context)
+      rails
       (filter #(route/is-type % "freeobj") (:nodes-in-block block))))))
 
 (defn annotate-block-with-wall-info
@@ -368,12 +337,16 @@
         direction (:direction block)
         [dir-x dir-y] direction
 
-        rail-transform (:track-transform block)
-
         [r1 r2 roof-idx form-idx] (split-body form)
 
-        [dx1 dy1] (:offset (get (:rails block) r1))
-        [dx2 dy2] (:offset (get (:rails block) r2))
+        rail1 (get (:rails block) r1)
+        rail2 (get (:rails block) r2)
+
+        rail-transform1 (:rail-transform rail1)
+        rail-transform2 (:rail-transform rail2)
+
+        [dx1 dy1] (:offset rail1)
+        [dx2 dy2] (:offset rail2)
 
         [dx1e _] (:offset-end (get (:rails block) r1))
         [dx2e _] (:offset-end (get (:rails block) r1))
@@ -407,12 +380,12 @@
                       prototype-sec-rail-roof-r]
 
         renderer #(create-transformed-object
-                   %1 %2 rail-transform geom/identity-transform
+                   %1 %2 %3 geom/identity-transform
                    0) ; track position, un-used?
         ]
     (concat
-     (map #(renderer % p1) (filter-not-nil prototypes-1))
-     (map #(renderer % p2) (filter-not-nil prototypes-2)))
+     (map #(renderer % p1 rail-transform1) (filter-not-nil prototypes-1))
+     (map #(renderer % p2 rail-transform2) (filter-not-nil prototypes-2)))
     )
   )
 
@@ -445,18 +418,20 @@
    :rail-transform track-transform })
 
 (defn create-transforms
-  [block next-block direction position curve height block-length]
-  (let [[dx dy] direction
-        [px py pz] position
+  [rail block next-block direction position curve height block-length]
+  (let [[start-x start-y] (:offset rail)
+        [end-x end-y] (:offset-end rail)
 
-        px2 (+ (* dx block-length) px)
-        py2 (+ height py)
-        pz2 (+ (* dy block-length) pz)
-
-        [start-x start-y] (:offset block)
-        [end-x end-y] (:offset-end block)
         end-x (or end-x start-x)
         end-y (or end-y start-y)
+
+        [dx dy] direction
+        [pxo pyo pzo] position
+        [px py pz] (vector-add position [(* dy start-x) start-y (* -1.0 dx start-x)])
+
+        px2 (+ (* dx block-length) pxo)
+        py2 (+ height pyo)
+        pz2 (+ (* dy block-length) pzo)
 
         direction2 (geom/rotate-vector-2d direction
                                           (Math/cos (- curve))
@@ -490,7 +465,7 @@
         offset2 [(* dy2 end-x) end-y (* -1.0 dx2 end-x)]
         position2 (vector-add offset2 [px2 py2 pz2])
 
-        [pdx pdy pdz] (vector-normalize (vector-sub position2 position))
+        [pdx pdy pdz] (vector-normalize (vector-sub position2 [px py pz]))
 
         [norm-x norm-z] (vector-normalize [pdx pdz])
 
@@ -512,7 +487,7 @@
     {:planar planar
      :updown updown
      :rail-transform rail-transform
-     :position position
+     :position [px py pz]
      :direction direction}))
 
 (defn create-objects-for-block-and-rail [context block [railidx rail]]
@@ -524,9 +499,13 @@
 (defn create-objects-for-block2
   [context block]
   [context
-   [(apply
+   (concat
+    [(apply
       concat
-      (map #(create-objects-for-block-and-rail context block %) (:rails block)))]])
+      (map #(create-objects-for-block-and-rail context block %) (:rails block)))]
+    (create-form-objects
+     context block
+     (filter #(route/is-type % "form") (:nodes-in-block block))))])
 
 (defn create-transform-for-block-and-rail [context block [railidx rail]]
   (let [[dx dy] (:direction block)
@@ -536,8 +515,8 @@
 
         direction (:direction block)
 
-        position (:position context)
-        position (vector-add position offset)
+        orig-position (:position context)
+        position (vector-add orig-position offset)
 
         next-block (:next-block block)
 
@@ -547,7 +526,7 @@
                             position
                             direction)
                            (create-transforms
-                            block next-block (:direction block) position
+                            rail block next-block (:direction block) orig-position
                             (:curve block) height block-length))]
     world-transforms))
 
@@ -613,7 +592,8 @@
                       (merge
                        (create-transform-for-block-and-rail
                         context block [railidx rail])
-                       rail)]) (:rails block))))))
+                       rail)])
+                   rails)))))
 
 (defn parse-block-information [context block symbol-table]
   (let
@@ -646,7 +626,7 @@
 (def cblock (nth bv 2))
 (def dblock (nth bv 3))
 
-(def blocks (take 4 bv))
+(def blocks (take 10 bv))
 (def ablocks (provide-forward-references blocks))
 (def ablocks (second
               (reduce (fn [[context blocks] block]
