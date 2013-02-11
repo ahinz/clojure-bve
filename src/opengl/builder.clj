@@ -52,7 +52,7 @@
                                   [(+ tx x)
                                    (+ ty y)
                                    (+ tz z)]
-                                  (:texture-coords vert)
+                                  (:texture-coordinate vert)
                                   [nx' ny' nz'])]
                            v)))
                      (:verts face))]
@@ -121,35 +121,42 @@
    track-pos))
 
 (defn create-rail-objects
-  [rails rail-transform position direction track-pos]
-  (map (fn [rail]
-         (let [type (:type rail)
-               [x y] (:offset rail)
-               [px py pz] position
-               trans-position [(+ px x) (+ py y) pz]]
-           (create-transformed-object
-            (:type rail)
-            trans-position
-            rail-transform
-            geom/identity-transform
-            track-pos)))
-       (vals rails)))
+  [context track-pos]
+  (let [position (:position context)
+        direction (:direction context)
+        rail-transform (:track-transform context)
+        rails (:rails context)]
+    (map (fn [rail]
+        (let [type (:type rail)
+              [x y] (:offset rail)
+              [px py pz] position
+              trans-position [(+ px x) (+ py y) pz]]
+          (create-transformed-object
+           (:type rail)
+           trans-position
+           rail-transform
+           geom/identity-transform
+           track-pos)))
+      (vals rails))))
 
 (defn create-wall-objects
-  [walls rails rail-transform position direction track-pos]
-  (map (fn [wall]
-         (let [type (:type wall)
-               rail-id (:rail wall)
-               rail (get rails rail-id)
-               [x y] (:offset rail)
-               [px py pz] position]
-           (create-transformed-object
-            type
-            [(+ x px) (+ y py) pz]
-            rail-transform
-            geom/identity-transform
-            track-pos)))
-       walls))
+  [walls rails context track-pos]
+  (let [position (:position context)
+        direction (:direction context)
+        rail-transform (:track-transform context)]
+    (map (fn [wall]
+           (let [type (:type wall)
+                 rail-id (:rail wall)
+                 rail (get rails rail-id)
+                 [x y] (:offset rail)
+                 [px py pz] position]
+             (create-transformed-object
+              type
+              [(+ x px) (+ y py) pz]
+              rail-transform
+              geom/identity-transform
+              track-pos)))
+         walls)))
 
 (defn fatal-error [s]
   (throw (Exception. s)))
@@ -161,6 +168,17 @@
 
 (defn fatal-error-missing-rail [railidx node]
   (fatal-error (str "Could not find rail index " railidx " " node)))
+
+(defn create-base-transforms [context]
+  (let [[dx dy] (:direction context)
+        track-yaw (Math/atan2 dx dy)
+        track-pitch (Math/atan (:pitch context))
+
+        ground-transform (geom/transform-create track-yaw 0.0 0.0)
+        track-transform (geom/transform-create track-yaw track-pitch 0.0)]
+    (assoc context
+      :ground-transform ground-transform
+      :track-transform track-transform)))
 
 (defn update-rail-objects-for-block
   [context block sym-tbl]
@@ -200,16 +218,80 @@
       (update-rail-objects-for-block block sym-tbl)))
 
 (defn create-starting-context [symbol-table]
-  {:rails {0 {:offset [0.0 0.0]}}
-   :rail-transform geom/identity-transform
+  {:symbol-table symbol-table
+   :rails {0 {:offset [0.0 0.0]}}
+   :walls {}
+
+   :pitch 0
+
    :position [0.0 0.0 0.0]
-   :direction [0.0 0.0 0.0]
-   :symbol-table symbol-table})
+   :direction [0.0 1.0]
+
+   :block-length 25})
+
+(defn update-position [context]
+  (let [[x y z] (:position context)
+        [dx dz] (:direction context)
+        block-length (:block-length context)
+        dx (* block-length dx)
+        dz (* block-length dz)]
+    (assoc context :position
+           [(+ dx x) y (+ dz z)])))
+
+(defn- filter-not-nil [f] (filter identity f))
+
+(defn create-form-object [context form]
+  (let [symbol-table (:symbol-table context)
+
+        position (:position context)
+        direction (:direction context)
+        [dir-x dir-y] direction
+
+        rail-transform (:track-transform context)
+
+        [r1 r2 roof-idx form-idx] (split-body form)
+
+        prototype-form-l (get symbol-table (str "forml" form-idx))
+        prototype-form-cl (get symbol-table (str "formcl" form-idx))
+
+        prototype-roof-l (get symbol-table (str "roofl" roof-idx))
+        prototype-roof-cl (get symbol-table (str "roofcl" roof-idx))
+
+        prototype-sec-rail-form-r (get symbol-table (str "formr" form-idx))
+        prototype-sec-rail-roof-r (get symbol-table (str "roofr" roof-idx))
+
+        [dx1 dy1] (:offset (get (:rails context) r1))
+        [dx2 dy2] (:offset (get (:rails context) r2))
+
+        [x y z] position
+
+        p1 [(+ (* dx1 dir-y) x) (+ (* dy1 dir-x) y) z]
+        p2 [(+ (* dx2 dir-y) x) (+ (* dy2 dir-x) y) z]
+
+        prototypes-1 [prototype-form-l prototype-form-cl
+                      prototype-roof-l prototype-roof-cl]
+
+        prototypes-2 [prototype-sec-rail-form-r
+                      prototype-sec-rail-roof-r]
+
+        renderer #(create-transformed-object
+                   %1 %2 rail-transform geom/identity-transform
+                   0) ; track position, un-used?
+        ]
+    (concat
+     (map #(renderer % p1) (filter-not-nil prototypes-1))
+     (map #(renderer % p2) (filter-not-nil prototypes-2)))
+    )
+  )
+
+(defn create-form-objects [context forms]
+  (apply concat
+       (map #(create-form-object context %) forms)))
 
 (defn create-objects-for-block
   [context block]
-  (let [symbol-table (:symbol-table context)
-        rail-transform (:rail-transform context)
+  (let [context (create-base-transforms context)
+        symbol-table (:symbol-table context)
         position (:position context)
         direction (:direction context)
 
@@ -231,17 +313,22 @@
              (create-free-object
               (:rails context)
               symbol-table node
-              position starting-distance rail-transform))) nodes)
-         railobjs (create-rail-objects
-                   (:rails context)
-                   rail-transform position direction
-                   starting-distance)
+              position starting-distance
+              geom/identity-transform ;; needs to be rail transform
+              ))) nodes)
+         formobjs (create-form-objects
+                   context (filter #(route/is-type % "form") nodes))
+
+         railobjs (create-rail-objects context starting-distance)
          wallobjs (create-wall-objects
                    (:walls context)
                    (:rails context)
-                   rail-transform position direction
+                   context
                    starting-distance)]
-      [context (concat wallobjs objs railobjs)]
+      [(update-position context)
+       (concat formobjs wallobjs objs railobjs)
+       ;(concat railobjs formobjs)
+       ]
       )))
 
 (def r
@@ -250,20 +337,19 @@
 (def s (:symbol-table r))
 (def bv (build-block-vector (:nodes r) 25))
 (def ablock (nth bv 0))
-(def iblock (nth bv 3))
-(def ctxt
-  {:rails
-   {0 {:offset [0.0 0.0]
-       :type (get s "rail9")}
-    1 {:offset [-12.0 0.0]
-       :type (get s "rail8")}}
-   :walls
-   [{:type (get s "walll5")
-     :rail 0}
-    {:type (get s "wallr5")
-     :rail 1}]})
-
+(def bblock (nth bv 1))
+(def cblock (nth bv 2))
+(def dblock (nth bv 3))
 (def ctxt (create-starting-context s))
 (def objs-and-ctxt (create-objects-for-block ctxt ablock))
 (def objs (filter identity (second objs-and-ctxt)))
+(def ctxt (first objs-and-ctxt))
+(def objs-and-ctxt (create-objects-for-block ctxt bblock))
+(def objs (concat objs (filter identity (second objs-and-ctxt))))
+(def ctxt (first objs-and-ctxt))
+(def objs-and-ctxt (create-objects-for-block ctxt cblock))
+(def objs (concat objs (filter identity (second objs-and-ctxt))))
+(def ctxt (first objs-and-ctxt))
+(def objs-and-ctxt (create-objects-for-block ctxt dblock))
+(def objs (concat objs (filter identity (second objs-and-ctxt))))
 (def ctxt (first objs-and-ctxt))

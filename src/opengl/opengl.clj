@@ -7,7 +7,7 @@
    [opengl.builder :as builder]]
   [:import
    (javax.swing JFrame)
-   (javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2)
+   (javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2 TraceGL2)
    (javax.media.opengl.awt GLCanvas)
    (javax.media.opengl.glu.gl2 GLUgl2)
    (com.jogamp.opengl.util FPSAnimator)]
@@ -29,7 +29,7 @@
   (first (gl-create-textures gl 1)))
 
 (defn gl-bind-texture-to-bmp [gl tid bmp]
-  (println-d "Bound " tid " to " (:file bmp))
+  (println "Bound " tid " to " (:file bmp))
   (let [width (:width bmp)
         height (:height bmp)
         buffer (core/bmp-data-into-buffer bmp)]
@@ -52,8 +52,8 @@
 
 (defn gl-bind-current-texture [gl texture]
   (let [tid (:gl-tid texture)]
+    (println "and bind me" tid)
     (if tid
-      (println-d ".glBind" tid)
       (.glBindTexture gl GL/GL_TEXTURE_2D tid))))
 
 (defn gl-disable-texture [gl]
@@ -88,11 +88,13 @@
 
 (defn gl-render-vertex [gl vertex]
   (let [tcoord (:texture-coordinate vertex)
-        [x y z] (:coordinate vertex)]
+        [x y z] (:coordinate vertex)
+        [nx ny nz] (:normal vertex)]
 
-    (.glNormal3d gl 1 0 0)
+    (.glNormal3d gl nx ny nz)
 
-    (if tcoord
+    (when tcoord
+      (println tcoord)
       (.glTexCoord2f gl (first tcoord) (second tcoord)))
 
     (.glVertex3f gl x y z)))
@@ -102,7 +104,9 @@
         texture-info (mutable-create-or-get-texture-for-material gl material)
         color (:color texture-info)
         verts (:verts face)]
+
     (when (:gl-tid texture-info)
+      (println "Render me")
       (gl-enable-texture-2d gl)
       (gl-bind-current-texture gl texture-info))
 
@@ -110,13 +114,16 @@
 
     (if color
       (let [[r g b] color]
-        (.glColor3f gl r g b)))
+        (.glColor3f gl r g b))
+      (.glColor3f gl 1.0 1.0 1.0))
 
-    (.glPolygonMode gl GL/GL_FRONT_AND_BACK GL2GL3/GL_LINE)
-    ;(.glPolygonMode gl GL/GL_BACK  GL2GL3/GL_FILL)
+    ;(.glPolygonMode gl GL/GL_FRONT_AND_BACK GL2GL3/GL_LINE)
+    ;(.glPolygonMode gl GL/GL_FRONT_AND_BACK GL2GL3/GL_FILL)
+    (.glPolygonMode gl GL/GL_FRONT  GL2GL3/GL_FILL)
+    ;(.glPolygonMode gl GL/GL_BACK  GL2GL3/GL_LINE)
+    (.glDisable gl GL/GL_BLEND)
 
     (.glBegin gl GL2/GL_POLYGON)
-
 
     (doseq [vert verts]
       (gl-render-vertex gl vert))
@@ -124,7 +131,7 @@
     (println-d ".glEnd")
     (.glEnd gl)
 
-    (if texture-info
+    (when (:gl-tid texture-info)
       (gl-disable-texture gl))))
 
 (defn textures-in-vertex [v]
@@ -168,11 +175,11 @@
 
     (.glColor3f 0.0 0.0 1.0)
     (.glVertex3d 0.0 0.0 0.0)
-    (.glVertex3d 0.0 0.0 40.0)
+    (.glVertex3d 0.0 0.0 100.0)
     (.glEnd)))
 
 (def gl-context
-  (ref {:camera {:eye [100.0 30.0 130.0]
+  (ref {:camera {:eye [20.0 20.0 -50.0]
                  :center [0.0 0.0 0.0]}
         :meshes (filter identity builder/objs)
     }))
@@ -191,12 +198,13 @@
 
         (.glClearColor gl (Float. 1.0) 1.0 1.0 1.0)
         (.glClear gl (bit-or GL/GL_COLOR_BUFFER_BIT GL/GL_DEPTH_BUFFER_BIT))
+        ;(.glClear gl GL/GL_COLOR_BUFFER_BIT)
         ;; Clear texture cache
-        (dosync
-         (ref-set textures {}))
+        ;; (dosync
+        ;;  (ref-set textures {}))
 
         (.glLoadIdentity gl)
-        (.gluPerspective glu (Float. 25.0) 1.0 10.0 800.0)
+        (.gluPerspective glu (Float. 25.0) 1.0 10.0 300.0)
         (apply glu-look-at
                (concat [glu]
                        (:eye camera) (:center camera) [0.0 1.0 0.0]))
@@ -209,12 +217,10 @@
     (displayChanged [drawable modeChanged deviceChanged] (println "DC"))
     (init [drawable]
       (.setGL drawable (DebugGL2. (.getGL drawable)))
+      ;(.setGL drawable (TraceGL2. (.getGL drawable) System/out))
       (let [gl (.getGL drawable)
             glu (GLUgl2.)
             aspect (float (/ w h))]
-
-        (.glClearColor gl (Float. 1.0) 1.0 1.0 1.0)
-        (.glClear gl (bit-or GL/GL_COLOR_BUFFER_BIT GL/GL_DEPTH_BUFFER_BIT))
 
         (.glViewport gl 0 0 w h)
 
@@ -227,10 +233,13 @@
                     0.0 0.0 0.0     ; center x,y,z
                     0.0 1.0 0.0)    ; up direction
 
+        (.glClearDepth gl 1.0)
         (.glEnable gl GL/GL_DEPTH_TEST)
+        (.glDepthFunc gl GL/GL_LEQUAL)
+        ;(.glDisable gl GL/GL_LIGHTING)
 
-        (.glCullFace gl GL/GL_BACK)
-        (.glEnable gl GL/GL_CULL_FACE)
+        ;(.glCullFace gl GL/GL_BACK)
+        ;(.glEnable gl GL/GL_CULL_FACE)
 
         ;(gl-draw-axis gl)
         ))
@@ -249,6 +258,11 @@
         (.setVisible true)))
     [canvas frame]))
 
+
+;(set-looking-at canvas 20.0 20.0 -50.0)
+(set-looking-at canvas 0.0 10.0 -50.0)
+(set-center canvas 0.0 0.0 75.0)
+
 (def canvas (first (make-canvas)))
 ;(def anim (FPSAnimator. canvas 1))
 ;(.start anim)
@@ -263,4 +277,12 @@
       (assoc context :camera updated-camera))))
   '())
 
-(set-looking-at canvas 20.0 20.0 -50.0)
+(defn set-center [canvas x y z]
+  (dosync
+   (ref-set
+    gl-context
+    (let [context @gl-context
+          camera (:camera context)
+          updated-camera (assoc camera :center [x y z])]
+      (assoc context :camera updated-camera))))
+  '())
