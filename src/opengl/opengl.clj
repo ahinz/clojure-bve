@@ -87,7 +87,6 @@
     (.glNormal3d gl nx ny nz)
 
     (when tcoord
-      (println tcoord)
       (.glTexCoord2f gl (first tcoord) (second tcoord)))
 
     (.glVertex3f gl x y z)))
@@ -99,7 +98,6 @@
         verts (:verts face)]
 
     (when (:gl-tid texture-info)
-      (println "Render me")
       (gl-enable-texture-2d gl)
       (gl-bind-current-texture gl texture-info))
 
@@ -202,6 +200,8 @@
                (concat [glu]
                        (:eye camera) (:center camera) [0.0 1.0 0.0]))
 
+        (.glScalef gl -1.0 1.0 1.0)
+
         (doseq [meshes-from-b3d objs]
           (doseq [mesh meshes-from-b3d]
             (gl-render-mesh gl mesh)))
@@ -210,7 +210,7 @@
     (displayChanged [drawable modeChanged deviceChanged] (println "DC"))
     (init [drawable]
       (.setGL drawable (DebugGL2. (.getGL drawable)))
-      (.setGL drawable (TraceGL2. (.getGL drawable) System/out))
+      ;(.setGL drawable (TraceGL2. (.getGL drawable) System/out))
       (let [gl (.getGL drawable)
             glu (GLUgl2.)
             aspect (float (/ w h))]
@@ -219,7 +219,7 @@
 
         (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_MODELVIEW)
         (.glLoadIdentity gl)
-        (.gluPerspective glu (Float. 25.0) aspect 10.0 200.0)
+        (.gluPerspective glu (Float. 25.0) aspect 10.0 300.0)
 
         (.gluLookAt glu
                     100.0 30.0 130.0  ; eye x,y,z
@@ -257,8 +257,8 @@
 (set-center canvas 0.0 0.0 10.0)
 
 (def canvas (first (make-canvas)))
-;(def anim (FPSAnimator. canvas 1))
-;(.start anim)
+(def anim (FPSAnimator. canvas 1))
+(.start anim)
 
 (defn set-looking-at [canvas ex ey ez]
   (dosync

@@ -327,7 +327,6 @@
                    starting-distance)]
       [(update-position context)
        (concat formobjs wallobjs objs railobjs)
-       ;(concat railobjs formobjs)
        ]
       )))
 
@@ -340,16 +339,26 @@
 (def bblock (nth bv 1))
 (def cblock (nth bv 2))
 (def dblock (nth bv 3))
-(def ctxt (create-starting-context s))
-(def objs-and-ctxt (create-objects-for-block ctxt ablock))
-(def objs (filter identity (second objs-and-ctxt)))
-(def ctxt (first objs-and-ctxt))
-(def objs-and-ctxt (create-objects-for-block ctxt bblock))
-(def objs (concat objs (filter identity (second objs-and-ctxt))))
-(def ctxt (first objs-and-ctxt))
-(def objs-and-ctxt (create-objects-for-block ctxt cblock))
-(def objs (concat objs (filter identity (second objs-and-ctxt))))
-(def ctxt (first objs-and-ctxt))
-(def objs-and-ctxt (create-objects-for-block ctxt dblock))
-(def objs (concat objs (filter identity (second objs-and-ctxt))))
-(def ctxt (first objs-and-ctxt))
+
+(def blocks (take 7 bv))
+(let [[context obj]
+      (reduce (fn [[context objs] block]
+                (let [[context new-objs] (create-objects-for-block context block)]
+                  [context
+                   (concat objs new-objs)]))
+              [(create-starting-context s) []]
+              blocks)]
+  (def objs obj))
+;; (def ctxt (create-starting-context s))
+;; (def objs-and-ctxt (create-objects-for-block ctxt ablock))
+;; (def objs (filter identity (second objs-and-ctxt)))
+;; (def ctxt (first objs-and-ctxt))
+;; (def objs-and-ctxt (create-objects-for-block ctxt bblock))
+;; (def objs (concat objs (filter identity (second objs-and-ctxt))))
+;; (def ctxt (first objs-and-ctxt))
+;; (def objs-and-ctxt (create-objects-for-block ctxt cblock))
+;; (def objs (concat objs (filter identity (second objs-and-ctxt))))
+;; (def ctxt (first objs-and-ctxt))
+;; (def objs-and-ctxt (create-objects-for-block ctxt dblock))
+;; (def objs (concat objs (filter identity (second objs-and-ctxt))))
+;; (def ctxt (first objs-and-ctxt))
