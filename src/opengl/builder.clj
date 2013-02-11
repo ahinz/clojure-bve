@@ -121,11 +121,12 @@
    track-pos))
 
 (defn create-rail-objects
-  [context track-pos]
-  (let [position (:position context)
-        direction (:direction context)
-        rail-transform (:track-transform context)
-        rails (:rails context)]
+  [block track-pos]
+  (let [
+        position (:position block)
+        direction (:direction block)
+        rail-transform (:track-transform block)
+        rails (:rails block)]
     (map (fn [rail]
         (let [type (:type rail)
               [x y] (:offset rail)
@@ -140,10 +141,10 @@
       (vals rails))))
 
 (defn create-wall-objects
-  [walls rails context track-pos]
-  (let [position (:position context)
-        direction (:direction context)
-        rail-transform (:track-transform context)]
+  [walls rails context block track-pos]
+  (let [position (:position block)
+        direction (:direction block)
+        rail-transform (:track-transform block)]
     (map (fn [wall]
            (let [type (:type wall)
                  rail-id (:rail wall)
@@ -180,42 +181,124 @@
       :ground-transform ground-transform
       :track-transform track-transform)))
 
-(defn update-rail-objects-for-block
+(defn- update-rails [context rails]
+  (assoc context :rails rails))
+
+(defn- prune-end-rails [context]
+  (update-rails
+   context
+   (into {}
+         (filter (fn [[k v]] (not (:offset-end v))) (:rails context)))))
+
+                   ;; ;; Player's rail curve
+                   ;; (route/is-type node "curve")
+                   ;; (let [[radius cant] (split-body node)
+                   ;;       cant (or cant 0.0)
+                   ;;       rail (get rails 0)]
+                   ;;   (assoc
+                   ;;       rails 0
+                   ;;       (assoc rail :cant cant :curve radius)))
+
+;; (defn update-rail-objects-for-block
+;;   [context block sym-tbl]
+;;   (assoc
+;;       context :rails
+;;       (let [rails (:rails context)]
+;;         (reduce (fn [rails node]
+;;                   (cond
+
+;;                    (route/is-type node "railstart")
+;;                    (let [[railidx dx dy typ] (split-body node)]
+;;                      (if (get rails railidx)
+;;                        (fatal-error
+;;                         (str "Cannot start rail " railidx " because it has already been started!")))
+;;                      (assoc rails railidx
+;;                             {:offset [dx dy]
+;;                              :type (get sym-tbl (str "rail" railidx))
+;;                              :cant 0.0
+;;                              :curve 0.0}))
+
+;;                    (route/is-type node "railtype")
+;;                    (let [[railidx texture] (split-body node)
+;;                          rail (get rails railidx)]
+;;                      (if (nil? rail)
+;;                        (fatal-error-missing-rail railidx node))
+;;                      (assoc
+;;                          rails railidx
+;;                          (assoc rail :type
+;;                                 (get sym-tbl (str "rail" railidx)))))
+
+;;                    (route/is-type node "railend")
+;;                    (let [[railidx x y] (split-body node)
+;;                          rail (get rails railidx)
+;;                          [sx sy] (:offset rail)
+;;                          x (or x sx)
+;;                          y (or y sy)]
+;;                      (assoc rails railidx
+;;                             (assoc rail :offset-end
+;;                                    [x y])))
+;;                    :else
+;;                    rails))
+;;                 rails (:nodes-in-block block)))))
+
+                   ;; ;; Player's rail curve
+                   ;; (route/is-type node "curve")
+                   ;; (let [[radius cant] (split-body node)
+                   ;;       cant (or cant 0.0)
+                   ;;       rail (get rails 0)]
+                   ;;   (assoc
+                   ;;       rails 0
+                   ;;       (assoc rail :cant cant :curve radius)))
+
+
+(defn annotate-block-with-rail-info
   [context block sym-tbl]
-  (assoc
-      context :rails
-      (let [rails (:rails context)]
-        (reduce (fn [rails node]
-                  (cond
-                   (route/is-type node "railstart")
-                   (let [[railidx dx dy typ] (split-body node)]
-                     (if (get rails railidx)
-                       (fatal-error
-                        (str "Cannot start rail " railidx " because it has already been started!")))
-                     (assoc rails railidx
-                            {:offset [dx dy]
-                             :type (get sym-tbl (str "rail" railidx))}))
+  (let [new-rails
+        (let [rails (:rails context)]
+          (reduce (fn [rails node]
+                    (cond
 
-                   (route/is-type node "railtype")
-                   (let [[railidx texture] (split-body node)
-                         rail (get rails railidx)]
-                     (if (nil? rail)
-                       (fatal-error-missing-rail railidx node))
-                     (assoc
-                         rails railidx
-                         (assoc rail :type
-                                (get sym-tbl (str "rail" railidx)))))
+                     (route/is-type node "railstart")
+                     (let [[railidx dx dy typ] (split-body node)]
+                       (if (get rails railidx)
+                         (fatal-error
+                          (str "Cannot start rail " railidx " because it has already been started!")))
+                       (assoc rails railidx
+                              {:offset [dx dy]
+                               :type (get sym-tbl (str "rail" railidx))
+                               :cant 0.0
+                               :curve 0.0}))
 
-                   (route/is-type node "railend")
-                   (fatal-error "not sure how to handle a rail end yet")
-                   :else
-                   rails))
-                rails (:nodes-in-block block)))))
+                     (route/is-type node "railtype")
+                     (let [[railidx texture] (split-body node)
+                           rail (get rails railidx)]
+                       (if (nil? rail)
+                         (fatal-error-missing-rail railidx node))
+                       (assoc
+                           rails railidx
+                           (assoc rail :type
+                                  (get sym-tbl (str "rail" railidx)))))
 
-(defn update-context-objects-for-block
-  [context block sym-tbl]
-  (-> context
-      (update-rail-objects-for-block block sym-tbl)))
+                     (route/is-type node "railend")
+                     (let [[railidx x y] (split-body node)
+                           rail (get rails railidx)
+                           [sx sy] (:offset rail)
+                           x (or x sx)
+                           y (or y sy)]
+                       (assoc rails railidx
+                              (assoc rail :offset-end
+                                     [x y])))
+                     :else
+                     rails))
+                  rails (:nodes-in-block block)))]
+    [(assoc context :rails new-rails)
+     (assoc block :rails new-rails)]))
+
+;; (defn update-context-objects-for-block
+;;   [context block sym-tbl]
+;;   (-> context
+;;       (prune-end-rails)
+;;       (update-rail-objects-for-block block sym-tbl)))
 
 (defn create-starting-context [symbol-table]
   {:symbol-table symbol-table
@@ -226,6 +309,7 @@
 
    :position [0.0 0.0 0.0]
    :direction [0.0 1.0]
+   :track-transform geom/identity-transform
 
    :block-length 25})
 
@@ -269,22 +353,22 @@
           new-mesh (m/create-mesh [new-face])]
       [new-mesh])))
 
-(defn create-form-object [context form]
+(defn create-form-object [context block form]
   (let [symbol-table (:symbol-table context)
 
-        position (:position context)
-        direction (:direction context)
+        position (:position block)
+        direction (:direction block)
         [dir-x dir-y] direction
 
-        rail-transform (:track-transform context)
+        rail-transform (:track-transform block)
 
         [r1 r2 roof-idx form-idx] (split-body form)
 
-        [dx1 dy1] (:offset (get (:rails context) r1))
-        [dx2 dy2] (:offset (get (:rails context) r2))
+        [dx1 dy1] (:offset (get (:rails block) r1))
+        [dx2 dy2] (:offset (get (:rails block) r2))
 
-        [dx1e _] (:offset-end (get (:rails context) r1))
-        [dx2e _] (:offset-end (get (:rails context) r1))
+        [dx1e _] (:offset-end (get (:rails block) r1))
+        [dx2e _] (:offset-end (get (:rails block) r1))
         dx1e (or dx1e dx1)
         dx2e (or dx2e dx2)
         delta-start (- dx2 dx1)
@@ -324,20 +408,20 @@
     )
   )
 
-(defn create-form-objects [context forms]
+(defn create-form-objects [context block forms]
   (apply concat
-       (map #(create-form-object context %) forms)))
+       (map #(create-form-object context block %) forms)))
 
 (defn create-objects-for-block
   [context block]
   (let [context (create-base-transforms context)
-        symbol-table (:symbol-table context)
-        position (:position context)
-        direction (:direction context)
+        symbol-table (:symbol-table block)
+        position (:position block)
+        direction (:direction block)
 
-        context
-        (update-context-objects-for-block
-         context block symbol-table)
+        ;; context
+        ;; (update-context-objects-for-block
+        ;;  context block symbol-table)
 
         starting-distance (:start-ref block)
         end-distance (:stop-ref block)
@@ -345,30 +429,54 @@
                #(read-string (:track-ref %))
                (:nodes-in-block block))]
     (let
-        [objs
+        [rails (:rails block)
+         objs
          (map
           (fn [node]
             (cond
              (route/is-type node "freeobj")
              (create-free-object
-              (:rails context)
+              rails
               symbol-table node
               position starting-distance
               geom/identity-transform ;; needs to be rail transform
               ))) nodes)
          formobjs (create-form-objects
-                   context (filter #(route/is-type % "form") nodes))
+                   context block (filter #(route/is-type % "form") nodes))
 
-         railobjs (create-rail-objects context starting-distance)
+         railobjs (create-rail-objects block starting-distance)
          wallobjs (create-wall-objects
                    (:walls context)
-                   (:rails context)
+                   rails
                    context
+                   block
                    starting-distance)]
       [(update-position context)
-       (concat formobjs wallobjs objs railobjs)
+       ;(concat formobjs wallobjs objs railobjs)
+       (concat railobjs objs)
        ]
       )))
+
+(defn- copy-geom-and-transform [context block]
+  (assoc block
+    :position (:position context)
+    :direction (:direction context)
+    :track-transform (:track-transform context)))
+
+(defn parse-block-information [context block symbol-table]
+  (let
+      [[context block] (annotate-block-with-rail-info context block symbol-table)
+       context (prune-end-rails context)
+
+       block (copy-geom-and-transform context block)
+       context (update-position context)]
+    [context block]))
+
+(defn provide-forward-references [blocks]
+  (map (fn [block next-block]
+         (assoc block
+           :next-block next-block))
+       blocks (concat (rest blocks) [nil])))
 
 (def r
   (route/resolve-symbol-table
@@ -380,25 +488,22 @@
 (def cblock (nth bv 2))
 (def dblock (nth bv 3))
 
-(def blocks (take 7 bv))
+(def blocks (take 8 bv))
+(def ablocks (second
+              (reduce (fn [[context blocks] block]
+                        (let [[context block]
+                              (parse-block-information context block s)]
+                          [context (conj blocks block)]))
+                      [(create-starting-context s) []] blocks)))
+(def ablocks (provide-forward-references ablocks))
 (let [[context obj]
       (reduce (fn [[context objs] block]
                 (let [[context new-objs] (create-objects-for-block context block)]
                   [context
                    (concat objs new-objs)]))
               [(create-starting-context s) []]
-              blocks)]
+              ablocks)]
   (def objs obj))
-;; (def ctxt (create-starting-context s))
-;; (def objs-and-ctxt (create-objects-for-block ctxt ablock))
-;; (def objs (filter identity (second objs-and-ctxt)))
-;; (def ctxt (first objs-and-ctxt))
-;; (def objs-and-ctxt (create-objects-for-block ctxt bblock))
-;; (def objs (concat objs (filter identity (second objs-and-ctxt))))
-;; (def ctxt (first objs-and-ctxt))
-;; (def objs-and-ctxt (create-objects-for-block ctxt cblock))
-;; (def objs (concat objs (filter identity (second objs-and-ctxt))))
-;; (def ctxt (first objs-and-ctxt))
-;; (def objs-and-ctxt (create-objects-for-block ctxt dblock))
-;; (def objs (concat objs (filter identity (second objs-and-ctxt))))
-;; (def ctxt (first objs-and-ctxt))
+
+(def m (doall (create-rail-objects (first ablocks) 1.0)))
+(keys (first m))

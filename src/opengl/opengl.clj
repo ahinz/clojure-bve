@@ -196,7 +196,7 @@
         ;;  (ref-set textures {}))
 
         (.glLoadIdentity gl)
-        (.gluPerspective glu (Float. 25.0) 1.0 10.0 300.0)
+        (.gluPerspective glu (Float. 25.0) 1.0 10.0 600.0)
         (apply glu-look-at
                (concat [glu]
                        (:eye camera) (:center camera) [0.0 1.0 0.0]))
@@ -220,8 +220,7 @@
 
         (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_MODELVIEW)
         (.glLoadIdentity gl)
-        (.gluPerspective glu (Float. 25.0) aspect 10.0 300.0)
-
+        (.gluPerspective glu (Float. 25.0) aspect 10.0 600.0)
         (.gluLookAt glu
                     100.0 30.0 130.0  ; eye x,y,z
                     0.0 0.0 0.0     ; center x,y,z
@@ -280,5 +279,7 @@
 ;(set-looking-at canvas 20.0 20.0 -50.0)
 ;(set-looking-at canvas 1.0 10.0 -50.0)
 ;(set-center canvas 0.0 0.0 10.0)
-(set-center canvas 0.0 0.0 120.0)
-(set-looking-at canvas 1.0 5.0 60.0)
+;(set-center canvas 0.0 0.0 120.0)
+;(set-looking-at canvas 1.0 5.0 60.0)
+(set-center canvas 0.0 0.0 400.0)
+(set-looking-at canvas 1.0 5.0 140.0)

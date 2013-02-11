@@ -62,4 +62,5 @@
     [id start-ref stop-ref nodes-in-block])
 
 (defn create-block [id start-ref stop-ref nodes-in-block]
-  (Block. id start-ref stop-ref nodes-in-block))
+  {:id id :start-ref start-ref :stop-ref stop-ref
+   :nodes-in-block nodes-in-block })
