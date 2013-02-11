@@ -294,35 +294,42 @@
         buffer (bmp-buffer-at-data metadata)
         arraysize (* (:height metadata) (:width metadata) 4)
         array (byte-array arraysize)]
-    (if (= (count color-table) 0)
-      buffer
-      (cond
-       (= depth 8)
-       (doseq [i (range (/ arraysize 4))]
-         (let [[b1 b2 b3 b4] (nth color-table (bit-and (short (.get buffer)) 0xff))
-               x (* i 4)]
-           (aset-byte array x b1)
-           (aset-byte array (+ x 1) b1)
-           (aset-byte array (+ x 2) b2)
-           (aset-byte array (+ x 3) b3)))
+    (cond
+     (= depth 24)
+     (doseq [i (range (/ arraysize 4))]
+       (let [[b1 b2 b3] (map (fn [_] (.get buffer)) (range 3))
+             x (* i 4)]
+         (aset-byte array x b1)
+         (aset-byte array (+ x 1) b2)
+         (aset-byte array (+ x 2) b3)
+         (aset-byte array (+ x 3) -127)))
 
-       (= depth 4)
-       (doseq [i (range (/ arraysize 8))]
-         (let [byte (bit-and (short (.get buffer)) 0xff)
-               color-idx-1 (bit-and byte 0xf)
-               color-idx-2 (bit-and (bit-shift-right byte 4) 0xf)
-               [b1 b2 b3 b4] (nth color-table color-idx-1)
-               [b5 b6 b7 b8] (nth color-table color-idx-2)
-               x (* i 8)]
-           (aset-byte array x b1)
-           (aset-byte array (+ x 1) b1)
-           (aset-byte array (+ x 2) b2)
-           (aset-byte array (+ x 3) b3)
-           (aset-byte array (+ x 4) b1)
-           (aset-byte array (+ x 5) b1)
-           (aset-byte array (+ x 6) b2)
-           (aset-byte array (+ x 7) b3)))
-       :else (throw (Exception. "Bad color depth"))))
+     (= depth 8)
+     (doseq [i (range (/ arraysize 4))]
+       (let [[b1 b2 b3 b4] (nth color-table (bit-and (short (.get buffer)) 0xff))
+             x (* i 4)]
+         (aset-byte array x b1)
+         (aset-byte array (+ x 1) b2)
+         (aset-byte array (+ x 2) b3)
+         (aset-byte array (+ x 3) b4)))
+
+     (= depth 4)
+     (doseq [i (range (/ arraysize 8))]
+       (let [byte (bit-and (short (.get buffer)) 0xff)
+             color-idx-1 (bit-and byte 0xf)
+             color-idx-2 (bit-and (bit-shift-right byte 4) 0xf)
+             [b1 b2 b3 b4] (nth color-table color-idx-1)
+             [b5 b6 b7 b8] (nth color-table color-idx-2)
+             x (* i 8)]
+         (aset-byte array x b1)
+         (aset-byte array (+ x 1) b1)
+         (aset-byte array (+ x 2) b2)
+         (aset-byte array (+ x 3) b3)
+         (aset-byte array (+ x 4) b1)
+         (aset-byte array (+ x 5) b1)
+         (aset-byte array (+ x 6) b2)
+         (aset-byte array (+ x 7) b3)))
+     :else (throw (Exception. (str "Bad color depth " depth))))
     array))
 
 (defn bmp-data-into-buffer [metadata]
