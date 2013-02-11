@@ -15,9 +15,6 @@
 
 (def textures (ref {}))
 
-;(def println-d println)
-(def println-d (fn [& more]))
-
 (defn gl-create-textures [^GL2 gl n]
   (if (> n 0)
     (let [tids (int-array n)]
@@ -45,23 +42,19 @@
     tid))
 
 (defn gl-enable-texture-2d [gl]
-  (println-d ".glEnable T2D")
   (.glEnable gl GL/GL_TEXTURE_2D)
   ;(.glTexEnv gl GL2/GL_TEXTURE_ENV GL2/GL_TEXTURE_ENV_MODE GL2/GL_MODULATE)
   )
 
 (defn gl-bind-current-texture [gl texture]
   (let [tid (:gl-tid texture)]
-    (println "and bind me" tid)
     (if tid
       (.glBindTexture gl GL/GL_TEXTURE_2D tid))))
 
 (defn gl-disable-texture [gl]
-  (println-d ".glDisable")
   (.glDisable gl GL/GL_TEXTURE_2D))
 
 (defn gl-load-single-texture [gl file]
-  (println-d "Load texture " file)
   (gl-bind-texture-to-bmp gl
                           (gl-create-texture gl)
                           (core/bmp-meta-read-file file)))
@@ -217,7 +210,7 @@
     (displayChanged [drawable modeChanged deviceChanged] (println "DC"))
     (init [drawable]
       (.setGL drawable (DebugGL2. (.getGL drawable)))
-      ;(.setGL drawable (TraceGL2. (.getGL drawable) System/out))
+      (.setGL drawable (TraceGL2. (.getGL drawable) System/out))
       (let [gl (.getGL drawable)
             glu (GLUgl2.)
             aspect (float (/ w h))]
@@ -260,8 +253,8 @@
 
 
 ;(set-looking-at canvas 20.0 20.0 -50.0)
-(set-looking-at canvas 0.0 10.0 -50.0)
-(set-center canvas 0.0 0.0 75.0)
+(set-looking-at canvas 1.0 10.0 -50.0)
+(set-center canvas 0.0 0.0 10.0)
 
 (def canvas (first (make-canvas)))
 ;(def anim (FPSAnimator. canvas 1))
