@@ -12,6 +12,10 @@
   ([coordinate texture-coordinate normal]
      (Vertex. coordinate texture-coordinate normal)))
 
+(defn update-vertex
+  [vertex coordinate]
+  (create-vertex coordinate (:texture-coordinate vertex) (:normal vertex)))
+
 (defrecord Mesh
     [faces])
 
@@ -23,6 +27,9 @@
 
 (defn create-face [verts material]
   (Face. verts material))
+
+(defn update-face [face verts]
+  (Face. verts (:material face)))
 
 (defrecord ColorSet
     [color transparent emissive])

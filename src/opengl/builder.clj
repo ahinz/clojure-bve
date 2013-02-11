@@ -240,6 +240,37 @@
 
 (defn- filter-not-nil [f] (filter identity f))
 
+; this is copied from https://github.com/sladen/openbve/blob/master/openBVE/OpenBve/OldParsers/CsvRwRouteParser.cs#L4634
+(defn transform-form-object [prototype neardist fardist]
+  (when prototype
+    (let [mesh (first prototype)
+          faces (:faces mesh)
+          face (first faces)
+          verts (:verts face)
+
+          x-sub (fn [v s]
+                  (when v
+                    (let [[x y z] (:coordinate v)]
+                      (m/update-vertex v [(- s x) y z]))))
+
+          zzzz (println neardist fardist "<---")
+
+          [_ _ x2 x3 _ _ x6 x7] verts
+          [x2 x3 x6 x7] [(x-sub x2 neardist)
+                         (x-sub x3 fardist)
+                         (x-sub x6 neardist)
+                         (x-sub x7 fardist)]
+
+          update-vector [x3 x2 nil nil x7 x6 nil nil]
+
+          tx-vector (map (fn [orig-v new-v]
+                           (or new-v orig-v))
+                         verts update-vector)
+
+          new-face (m/update-face face tx-vector)
+          new-mesh (m/create-mesh [new-face])]
+      [new-mesh])))
+
 (defn create-form-object [context form]
   (let [symbol-table (:symbol-table context)
 
@@ -251,22 +282,33 @@
 
         [r1 r2 roof-idx form-idx] (split-body form)
 
-        prototype-form-l (get symbol-table (str "forml" form-idx))
-        prototype-form-cl (get symbol-table (str "formcl" form-idx))
-
-        prototype-roof-l (get symbol-table (str "roofl" roof-idx))
-        prototype-roof-cl (get symbol-table (str "roofcl" roof-idx))
-
-        prototype-sec-rail-form-r (get symbol-table (str "formr" form-idx))
-        prototype-sec-rail-roof-r (get symbol-table (str "roofr" roof-idx))
-
         [dx1 dy1] (:offset (get (:rails context) r1))
         [dx2 dy2] (:offset (get (:rails context) r2))
+
+        [dx1e _] (:offset-end (get (:rails context) r1))
+        [dx2e _] (:offset-end (get (:rails context) r1))
+        dx1e (or dx1e dx1)
+        dx2e (or dx2e dx2)
+        delta-start (- dx2 dx1)
+        delta-end (- dx2e dx1e)
 
         [x y z] position
 
         p1 [(+ (* dx1 dir-y) x) (+ (* dy1 dir-x) y) z]
         p2 [(+ (* dx2 dir-y) x) (+ (* dy2 dir-x) y) z]
+
+        prototype-form-l (get symbol-table (str "forml" form-idx))
+        prototype-form-cl (transform-form-object
+                           (get symbol-table (str "formcl" form-idx))
+                           delta-start delta-end)
+
+        prototype-roof-l (get symbol-table (str "roofl" roof-idx))
+        prototype-roof-cl (transform-form-object
+                           (get symbol-table (str "roofcl" roof-idx))
+                           delta-start delta-end)
+
+        prototype-sec-rail-form-r (get symbol-table (str "formr" form-idx))
+        prototype-sec-rail-roof-r (get symbol-table (str "roofr" roof-idx))
 
         prototypes-1 [prototype-form-l prototype-form-cl
                       prototype-roof-l prototype-roof-cl]
