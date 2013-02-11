@@ -285,3 +285,4 @@
 (set-looking-at canvas 1.0 5.0 140.0)
 (set-center canvas 0.0 0.0 0.0)
 (set-looking-at canvas 1.0 5.0 -10.0)
+(set-looking-at canvas 1.0 5.0 -60.0)

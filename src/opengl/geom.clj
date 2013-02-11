@@ -55,7 +55,7 @@
       (* (+ (* oc dy dz) (* sina dx)) py))]))
 
 (defn transform-create-from-vectors [v1 v2 v3]
-  [v1 v2 v3])
+  (map #(apply v3f %) [v1 v2 v3]))
 
 (defn transform-create
   ([yaw pitch roll]
