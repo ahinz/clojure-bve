@@ -7,7 +7,7 @@
    [opengl.builder :as builder]]
   [:import
    (javax.swing JFrame)
-   (javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2 TraceGL2)
+   javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2 TraceGL2
    (javax.media.opengl.awt GLCanvas)
    (javax.media.opengl.glu.gl2 GLUgl2)
    (com.jogamp.opengl.util FPSAnimator)]

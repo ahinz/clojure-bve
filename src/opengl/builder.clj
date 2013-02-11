@@ -61,7 +61,6 @@
 
 (defn create-transformed-object
   [prototype pos base-transform aux-transform track-position]
-  (println "track p" base-transform)
   (map (fn [mesh]
          (apply-translate-to-mesh mesh pos aux-transform base-transform))
        prototype))
@@ -627,7 +626,8 @@
 
 (defn parse-block-information [context block symbol-table]
   (let
-      [[context block] (annotate-block-with-rail-info context block symbol-table)
+      [block (assoc block :position (context :position))
+       [context block] (annotate-block-with-rail-info context block symbol-table)
        [context block] (annotate-block-with-wall-info context block symbol-table)
        block (create-transform-for-block context block)
        context (prune-end-rails context)
