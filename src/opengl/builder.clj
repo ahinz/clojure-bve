@@ -75,50 +75,45 @@
   (nth tx 2))
 
 
-(defn create-free-object [rails symbol-table node position starting-distance rail-transformation]
-  (let [rt rail-transformation
-        body (.trim (route/trim-trailing-comma (:body node)))
-        [railidx i dx dy yaw pitch roll] (map read-string (.split body ";"))
-        [rx ry] (:offset (get rails railidx))
-        [px py pz] position
-        yaw (or yaw 0.0)
-        pitch (or pitch 0.0)
-        roll (or roll 0.0)
+;; (defn create-free-object [rails symbol-table node starting-distance]
+;;   (let [body (.trim (route/trim-trailing-comma (:body node)))
+;;         [railidx i dx dy yaw pitch roll] (map read-string (.split body ";"))
+;;         rail (get rails railidx)
+;;         [px py pz] (:position rail)
+;;         yaw (or yaw 0.0)
+;;         pitch (or pitch 0.0)
+;;         roll (or roll 0.0)
 
-        prototype (get symbol-table (str "freeobj" i))
+;;         prototype (get symbol-table (str "freeobj" i))
 
-        track-pos (read-string (:track-ref node))
-        dz (- track-pos starting-distance)
+;;         track-pos (read-string (:track-ref node))
+;;         dz (- track-pos starting-distance)
 
-        posx (+ rx px
-                (* dx (:x (get-x rt)))
-                (* dy (:x (get-y rt)))
-                (* dz (:x (get-z rt))))
+;;         posx (+ rx px
+;;                 (* dx (:x (get-x rt)))
+;;                 (* dy (:x (get-y rt)))
+;;                 (* dz (:x (get-z rt))))
 
-        posy (+ ry py
-                (* dx (:y (get-x rt)))
-                (* dy (:y (get-y rt)))
-                (* dz (:y (get-z rt))))
+;;         posy (+ ry py
+;;                 (* dx (:y (get-x rt)))
+;;                 (* dy (:y (get-y rt)))
+;;                 (* dz (:y (get-z rt))))
 
-        posz (+ pz
-                (* dx (:z (get-x rt)))
-                (* dy (:z (get-y rt)))
-                (* dz (:z (get-z rt))))]
-    (create-transformed-object
-     prototype
-     [posx posy posz]
-     rail-transformation
-     (geom/transform-create yaw pitch roll)
-     track-pos)))
+;;         posz (+ pz
+;;                 (* dx (:z (get-x rt)))
+;;                 (* dy (:z (get-y rt)))
+;;                 (* dz (:z (get-z rt))))]
+;;     (create-transformed-object
+;;      prototype
+;;      [posx posy posz]
+;;      rail-transformation
+;;      (geom/transform-create yaw pitch roll)
+;;      track-pos)))
 
-(defn create-rail-object
-  [prototype rail-transform position direction track-pos]
-  (create-transformed-object
-   prototype
-   position
-   rail-transform
-   geom/identity-transform
-   track-pos))
+(defn- split-body [node]
+  (map read-string
+       (.split
+        (.trim (route/trim-trailing-comma (:body node))) ";")))
 
 (defn create-rail-objects
   [block rail track-pos]
@@ -132,6 +127,24 @@
      rail-transform
      geom/identity-transform
      track-pos)))
+
+(defn create-free-objects
+  [freeobjs block rail track-pos]
+  (apply
+   concat
+   (map (fn [freeobj]
+          (let [rail-transform (:rail-transform rail)
+                position (rotate-free-obj rail-transform
+                                          (:position rail)
+                                          (:position freeobj))]
+            (create-transformed-object
+             (:prototype freeobj)
+             position
+             rail-transform
+             (geom/transform-create (:yaw freeobj)
+                                    (:pitch freeobj)
+                                    (:roll freeobj))
+             track-pos))) freeobjs)))
 
 (defn create-wall-objects
   [wall block railidx rail track-pos]
@@ -150,15 +163,10 @@
               track-pos) (:prototypes wall))))
     []))
 
-(defn fatal-error [s]
+(defn- fatal-error [s]
   (throw (Exception. s)))
 
-(defn split-body [node]
-  (map read-string
-       (.split
-        (.trim (route/trim-trailing-comma (:body node))) ";")))
-
-(defn fatal-error-missing-rail [railidx node]
+(defn- fatal-error-missing-rail [railidx node]
   (fatal-error (str "Could not find rail index " railidx " " node)))
 
 (defn create-base-transforms [context]
@@ -175,71 +183,15 @@
 (defn- update-rails [context rails]
   (assoc context :rails rails))
 
+(defn- update-rails-and-block [context block rails]
+  [(assoc context :rails rails)
+   (assoc block :rails rails)])
+
 (defn- prune-end-rails [context]
   (update-rails
    context
    (into {}
          (filter (fn [[k v]] (not (:offset-end v))) (:rails context)))))
-
-                   ;; ;; Player's rail curve
-                   ;; (route/is-type node "curve")
-                   ;; (let [[radius cant] (split-body node)
-                   ;;       cant (or cant 0.0)
-                   ;;       rail (get rails 0)]
-                   ;;   (assoc
-                   ;;       rails 0
-                   ;;       (assoc rail :cant cant :curve radius)))
-
-;; (defn update-rail-objects-for-block
-;;   [context block sym-tbl]
-;;   (assoc
-;;       context :rails
-;;       (let [rails (:rails context)]
-;;         (reduce (fn [rails node]
-;;                   (cond
-
-;;                    (route/is-type node "railstart")
-;;                    (let [[railidx dx dy typ] (split-body node)]
-;;                      (if (get rails railidx)
-;;                        (fatal-error
-;;                         (str "Cannot start rail " railidx " because it has already been started!")))
-;;                      (assoc rails railidx
-;;                             {:offset [dx dy]
-;;                              :type (get sym-tbl (str "rail" railidx))
-;;                              :cant 0.0
-;;                              :curve 0.0}))
-
-;;                    (route/is-type node "railtype")
-;;                    (let [[railidx texture] (split-body node)
-;;                          rail (get rails railidx)]
-;;                      (if (nil? rail)
-;;                        (fatal-error-missing-rail railidx node))
-;;                      (assoc
-;;                          rails railidx
-;;                          (assoc rail :type
-;;                                 (get sym-tbl (str "rail" railidx)))))
-
-;;                    (route/is-type node "railend")
-;;                    (let [[railidx x y] (split-body node)
-;;                          rail (get rails railidx)
-;;                          [sx sy] (:offset rail)
-;;                          x (or x sx)
-;;                          y (or y sy)]
-;;                      (assoc rails railidx
-;;                             (assoc rail :offset-end
-;;                                    [x y])))
-;;                    :else
-;;                    rails))
-;;                 rails (:nodes-in-block block)))))
-
-                   ;; ;; Player's rail curve
-                   ;; (route/is-type node "curve")
-                   ;; (let [[radius cant] (split-body node)
-                   ;;       cant (or cant 0.0)
-                   ;;       rail (get rails 0)]
-                   ;;   (assoc
-                   ;;       rails 0
-                   ;;       (assoc rail :cant cant :curve radius)))
 
 (defn parse-block-with-wall-info
   [block sym-tbl]
@@ -253,6 +205,50 @@
                       :prototypes (map #(get sym-tbl (str % index)) indicies)})))
           {}
           (filter #(route/is-type % "wall") (:nodes-in-block block))))
+
+(defn- rotate-free-obj [rail-transform [px py pz] [dx dy dz]]
+  [(+ px
+      (* dx (:x (get-x rail-transform)))
+      (* dy (:x (get-y rail-transform)))
+      (* dz (:x (get-z rail-transform))))
+   (+ py
+      (* dx (:y (get-x rail-transform)))
+      (* dy (:y (get-y rail-transform)))
+      (* dz (:y (get-z rail-transform))))
+   (+ pz
+      (* dx (:z (get-x rail-transform)))
+      (* dy (:z (get-y rail-transform)))
+      (* dz (:z (get-z rail-transform))))])
+
+(defn annotate-block-with-freeobj-info [context block sym-tbl]
+  (let [rails (:rails block)]
+    (update-rails-and-block
+     context
+     block
+     (reduce
+      (fn [rails freeobj-node]
+        (let [[railidx i dx dy yaw pitch roll] (split-body freeobj-node)
+              yaw (or yaw 0.0)
+              pitch (or pitch 0.0)
+              roll (or roll 0.0)
+
+              rail (get rails railidx)
+              prototype (get sym-tbl (str "freeobj" i))
+
+              track-pos (read-string (:track-ref freeobj-node))
+              dz (- track-pos (:start-ref block))
+
+              new-rail (assoc
+                           rail :freeobjs
+                           (conj (:freeobjs rail)
+                                 {:prototype prototype
+                                  :position [dx dy dz]
+                                  :yaw yaw
+                                  :pitch pitch
+                                  :roll roll}))]
+          (assoc rails railidx new-rail)))
+      (:rails context)
+      (filter #(route/is-type % "freeobj") (:nodes-in-block block))))))
 
 (defn annotate-block-with-wall-info
   [context block sym-tbl]
@@ -283,6 +279,7 @@
                               {:offset [dx dy]
                                :type (get sym-tbl (str "rail" railidx))
                                :cant 0.0
+                               :freeobjs []
                                :curve 0.0}))
 
                      (route/is-type node "railtype")
@@ -310,15 +307,10 @@
     [(assoc context :rails new-rails)
      (assoc block :rails new-rails)]))
 
-;; (defn update-context-objects-for-block
-;;   [context block sym-tbl]
-;;   (-> context
-;;       (prune-end-rails)
-;;       (update-rail-objects-for-block block sym-tbl)))
-
 (defn create-starting-context [symbol-table]
   {:symbol-table symbol-table
-   :rails {0 {:offset [0.0 0.0]}}
+   :rails {0 {:offset [0.0 0.0]
+              :freeobjs []}}
    :walls {}
 
    :pitch 0
@@ -454,81 +446,87 @@
 
 (defn create-transforms
   [block next-block direction position curve height block-length]
-  (if (nil? next-block)
-    (create-player-rail-transforms (:track-transform block) position direction)
-    (let [[dx dy] direction
-          [px py pz] position
+  (let [[dx dy] direction
+        [px py pz] position
 
-          px2 (+ (* dx block-length) px)
-          py2 (+ height py)
-          pz2 (+ (* dy block-length) pz)
+        px2 (+ (* dx block-length) px)
+        py2 (+ height py)
+        pz2 (+ (* dy block-length) pz)
 
-          [start-x start-y] (:offset block)
-          [end-x end-y] (:offset-end block)
-          end-x (or end-x start-x)
-          end-y (or end-y start-y)
+        [start-x start-y] (:offset block)
+        [end-x end-y] (:offset-end block)
+        end-x (or end-x start-x)
+        end-y (or end-y start-y)
 
-          direction2 (geom/rotate-vector-2d direction
-                                            (Math/cos (- curve))
-                                            (Math/sin (- curve)))
+        direction2 (geom/rotate-vector-2d direction
+                                          (Math/cos (- curve))
+                                          (Math/sin (- curve)))
 
-          next-turn (:turn next-block)
+        next-turn (:turn next-block)
 
-          direction2 (geom/rotate-vector-2d direction2
-                                            (Math/cos next-turn)
-                                            (Math/sin next-turn))
+        direction2 (geom/rotate-vector-2d direction2
+                                          (Math/cos next-turn)
+                                          (Math/sin next-turn))
 
-          next-curve (:curve next-block)
-          next-pitch (:pitch next-block)
+        next-curve (:curve next-block)
+        next-pitch (:pitch next-block)
 
-          pitch (:pitch block)
-          curve (:curve block)
+        pitch (:pitch block)
+        curve (:curve block)
 
-          slope2 (/ block-length (Math/sqrt (+ 1.0 (* next-pitch next-pitch))))
-          height2 (* slope2 block-length)
+        slope2 (/ block-length (Math/sqrt (+ 1.0 (* next-pitch next-pitch))))
+        height2 (* slope2 block-length)
 
-          b2 (if (= 0.0 next-curve) 0.0
-                 (/ slope2 (Math/abs next-curve)))
+        b2 (if (= 0.0 next-curve) 0.0
+               (/ slope2 (Math/abs next-curve)))
 
-          block-interval2 (Math/sqrt
-                           (* 2.0 next-curve next-curve (- 1.0 (Math/cos b2))))
+        block-interval2 (Math/sqrt
+                         (* 2.0 next-curve next-curve (- 1.0 (Math/cos b2))))
 
-          a2 (* 0.5 (Math/signum next-curve) b2)
-          [dx2 dy2] (geom/rotate-vector-2d direction2
-                                           (Math/cos (- a2)) (Math/sin (- a2)))
+        a2 (* 0.5 (Math/signum next-curve) b2)
+        [dx2 dy2] (geom/rotate-vector-2d direction2
+                                         (Math/cos (- a2)) (Math/sin (- a2)))
 
-          offset2 [(* dy2 end-x) end-y (* -1.0 dx2 end-x)]
-          position2 (vector-add offset2 [px2 py2 pz2])
+        offset2 [(* dy2 end-x) end-y (* -1.0 dx2 end-x)]
+        position2 (vector-add offset2 [px2 py2 pz2])
 
-          [pdx pdy pdz] (vector-normalize (vector-sub position2 position))
+        [pdx pdy pdz] (vector-normalize (vector-sub position2 position))
 
-          [norm-x norm-z] (vector-normalize [pdx pdz])
+        [norm-x norm-z] (vector-normalize [pdx pdz])
 
-          rail-trans-z [pdx pdy pdz]
-          rail-trans-x [norm-z 0.0 (* -1.0 norm-x)]
-          rail-trans-y (vector-cross rail-trans-z rail-trans-x)
+        rail-trans-z [pdx pdy pdz]
+        rail-trans-x [norm-z 0.0 (* -1.0 norm-x)]
+        rail-trans-y (vector-cross rail-trans-z rail-trans-x)
 
-          rail-transform (geom/transform-create-from-vectors
-                          rail-trans-x
-                          rail-trans-y
-                          rail-trans-z)
+        rail-transform (geom/transform-create-from-vectors
+                        rail-trans-x
+                        rail-trans-y
+                        rail-trans-z)
 
-          delta-x (- end-x start-x)
-          delta-y (- end-y start-y)
+        delta-x (- end-x start-x)
+        delta-y (- end-y start-y)
 
-          planar (Math/atan (/ dx block-length))
-          updown (Math/atan (/ dy block-length))]
+        planar (Math/atan (/ dx block-length))
+        updown (Math/atan (/ dy block-length))]
 
-      {:planar planar
-       :updown updown
-       :rail-transform rail-transform
-       :position [px2 py2 pz2]
-       :direction direction})))
+    {:planar planar
+     :updown updown
+     :rail-transform rail-transform
+     :position position
+     :direction direction}))
 
 (defn create-objects-for-block-and-rail [context block [railidx rail]]
   (concat
    (create-rail-objects block rail (:start-ref block))
-   (create-wall-objects (:walls rail) block railidx rail (:start-ref block))))
+   (create-wall-objects (:walls rail) block railidx rail (:start-ref block))
+   (create-free-objects (:freeobjs rail) block rail (:start-ref block))))
+
+(defn create-objects-for-block2
+  [context block]
+  [context
+   [(apply
+      concat
+      (map #(create-objects-for-block-and-rail context block %) (:rails block)))]])
 
 (defn create-transform-for-block-and-rail [context block [railidx rail]]
   (let [[dx dy] (:direction block)
@@ -538,12 +536,12 @@
 
         direction (:direction block)
 
-        position (:position block)
+        position (:position context)
         position (vector-add position offset)
 
         next-block (:next-block block)
 
-        world-transforms (if (= railidx 0)
+        world-transforms (if (or (= railidx 0) (not next-block))
                            (create-player-rail-transforms
                             (:track-transform block)
                             position
@@ -553,59 +551,52 @@
                             (:curve block) height block-length))]
     world-transforms))
 
-(defn create-objects-for-block2
-  [context block]
-  [context
-   [(apply
-      concat
-      (map #(create-objects-for-block-and-rail context block %) (:rails block)))]])
+;; (defn create-objects-for-block
+;;   [context block]
+;;   (let [context (create-base-transforms context)
+;;         symbol-table (:symbol-table block)
+;;         position (:position block)
+;;         direction (:direction block)
 
-(defn create-objects-for-block
-  [context block]
-  (let [context (create-base-transforms context)
-        symbol-table (:symbol-table block)
-        position (:position block)
-        direction (:direction block)
+;;         ;; context
+;;         ;; (update-context-objects-for-block
+;;         ;;  context block symbol-table)
 
-        ;; context
-        ;; (update-context-objects-for-block
-        ;;  context block symbol-table)
+;;         starting-distance (:start-ref block)
+;;         end-distance (:stop-ref block)
+;;         nodes (sort-by
+;;                #(read-string (:track-ref %))
+;;                (:nodes-in-block block))]
+;;     (let
+;;         [rails (:rails block)
+;;          objs
+;;          (map
+;;           (fn [node]
+;;             (cond
+;;              (route/is-type node "freeobj")
+;;              (create-free-object
+;;               rails
+;;               symbol-table node
+;;               position starting-distance
+;;               geom/identity-transform ;; needs to be rail transform
+;;               ))) nodes)
+;;          formobjs (create-form-objects
+;;                    context block (filter #(route/is-type % "form") nodes))
 
-        starting-distance (:start-ref block)
-        end-distance (:stop-ref block)
-        nodes (sort-by
-               #(read-string (:track-ref %))
-               (:nodes-in-block block))]
-    (let
-        [rails (:rails block)
-         objs
-         (map
-          (fn [node]
-            (cond
-             (route/is-type node "freeobj")
-             (create-free-object
-              rails
-              symbol-table node
-              position starting-distance
-              geom/identity-transform ;; needs to be rail transform
-              ))) nodes)
-         formobjs (create-form-objects
-                   context block (filter #(route/is-type % "form") nodes))
-
-         ;railobjs (create-rail-objects rail starting-distance)
-         ;; wallobjs (create-wall-objects
-         ;;           (:walls context)
-         ;;           rails
-         ;;           context
-         ;;           block
-         ;;           starting-distance)
-         ]
-      [(update-position context)
-       ;(concat formobjs wallobjs objs railobjs)
-       ;(concat railobjs objs)
-       [objs]
-       ]
-      )))
+;;          ;railobjs (create-rail-objects rail starting-distance)
+;;          ;; wallobjs (create-wall-objects
+;;          ;;           (:walls context)
+;;          ;;           rails
+;;          ;;           context
+;;          ;;           block
+;;          ;;           starting-distance)
+;;          ]
+;;       [(update-position context)
+;;        ;(concat formobjs wallobjs objs railobjs)
+;;        ;(concat railobjs objs)
+;;        [objs]
+;;        ]
+;;       )))
 
 (defn- copy-geom-and-transform [context block]
   (assoc block
@@ -629,7 +620,10 @@
       [block (assoc block :position (context :position))
        [context block] (annotate-block-with-rail-info context block symbol-table)
        [context block] (annotate-block-with-wall-info context block symbol-table)
+       [context block] (annotate-block-with-freeobj-info context block symbol-table)
+
        block (create-transform-for-block context block)
+
        context (prune-end-rails context)
 
        block (copy-geom-and-transform context block)
