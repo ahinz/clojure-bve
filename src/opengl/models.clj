@@ -1,4 +1,6 @@
 (ns opengl.models
+  [:require
+   [opengl.geom :as geom]]
   (:gen-class))
 
 ;;;;;; Rendering Models
@@ -63,4 +65,14 @@
 
 (defn create-block [id start-ref stop-ref nodes-in-block]
   {:id id :start-ref start-ref :stop-ref stop-ref
-   :nodes-in-block nodes-in-block })
+   :nodes-in-block nodes-in-block
+   :curve 0.0
+   :pitch 0.0
+   :height 0.0
+   :turn 0.0
+   :offset [0.0 0.0]
+   :track-transform geom/identity-transform
+   :position [0.0 0.0 0.0]
+   :direction [0.0 1.0]
+   :block-length 25
+   })

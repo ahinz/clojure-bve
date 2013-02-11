@@ -17,6 +17,10 @@
 (defn- get-y [t] (nth t 1))
 (defn- get-z [t] (nth t 2))
 
+(defn rotate-vector-2d [[x y] cosa sina]
+  [(- (* cosa x) (* sina y))
+   (+ (* sina x) (* cosa y))])
+
 (defn rotate-with-transform [[x y z] t]
   [(+ (* (:x (get-x t)) x)
       (* (:x (get-y t)) y)
@@ -50,6 +54,8 @@
       (* (- (* oc dx dz) (* sina dy)) px)
       (* (+ (* oc dy dz) (* sina dx)) py))]))
 
+(defn transform-create-from-vectors [v1 v2 v3]
+  [v1 v2 v3])
 
 (defn transform-create
   ([yaw pitch roll]

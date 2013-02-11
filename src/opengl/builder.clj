@@ -121,24 +121,21 @@
    track-pos))
 
 (defn create-rail-objects
-  [block track-pos]
-  (let [
-        position (:position block)
-        direction (:direction block)
-        rail-transform (:track-transform block)
-        rails (:rails block)]
-    (map (fn [rail]
-        (let [type (:type rail)
-              [x y] (:offset rail)
-              [px py pz] position
-              trans-position [(+ px x) (+ py y) pz]]
-          (create-transformed-object
-           (:type rail)
-           trans-position
-           rail-transform
-           geom/identity-transform
-           track-pos)))
-      (vals rails))))
+  [block rail track-pos]
+  (let [position (:position block)
+        rails (:rails block)
+        direction (:direction rail)
+        rail-transform (:rail-transform rail)
+        type (:type rail)
+        [x y] (:offset rail)
+        [px py pz] position
+        trans-position [(+ px x) (+ py y) pz]]
+    (create-transformed-object
+     (:type rail)
+     trans-position
+     rail-transform
+     geom/identity-transform
+     track-pos)))
 
 (defn create-wall-objects
   [walls rails context block track-pos]
@@ -257,7 +254,6 @@
         (let [rails (:rails context)]
           (reduce (fn [rails node]
                     (cond
-
                      (route/is-type node "railstart")
                      (let [[railidx dx dy typ] (split-body node)]
                        (if (get rails railidx)
@@ -412,6 +408,128 @@
   (apply concat
        (map #(create-form-object context block %) forms)))
 
+(defn- vector-add [v1 v2]
+  (map + v1 v2))
+
+(defn- vector-sub [v1 v2]
+  (map - v1 v2))
+
+(defn vector-normalize [v1]
+  (let [t (Math/sqrt (apply + (map #(* % %) v1)))]
+    (if (= t 0)
+      v1
+      (map #(/ % t) v1))))
+
+(defn vector-cross [[ax ay az] [bx by bz]]
+  [(- (* ay bz) (* az by))
+   (- (* az bx) (* ax bz))
+   (- (* ax by) (* ay bx))])
+
+(defn create-player-rail-transforms [track-transform]
+  {:planar 0.0
+   :updown 0.0
+   :rail-transform track-transform })
+
+(defn create-transforms
+  [block next-block direction position curve height block-length]
+  (if (nil? next-block)
+    (create-player-rail-transforms (:track-transform block))
+    (let [[dx dy] direction
+          [px py pz] position
+
+          px2 (+ (* dx block-length) px)
+          py2 (+ height py)
+          pz2 (+ (* dy block-length) pz)
+
+          [start-x start-y] (:offset block)
+          [end-x end-y] (:offset-end block)
+          end-x (or end-x start-x)
+          end-y (or end-y start-y)
+
+          direction2 (geom/rotate-vector-2d direction
+                                            (Math/cos (- curve))
+                                            (Math/sin (- curve)))
+
+          next-turn (:turn next-block)
+
+          direction2 (geom/rotate-vector-2d direction2
+                                            (Math/cos next-turn)
+                                            (Math/sin next-turn))
+
+          next-curve (:curve next-block)
+          next-pitch (:pitch next-block)
+
+          pitch (:pitch block)
+          curve (:curve block)
+
+          slope2 (/ block-length (Math/sqrt (+ 1.0 (* next-pitch next-pitch))))
+          height2 (* slope2 block-length)
+
+          b2 (if (= 0.0 next-curve) 0.0
+                 (/ slope2 (Math/abs next-curve)))
+
+          block-interval2 (Math/sqrt
+                           (* 2.0 next-curve next-curve (- 1.0 (Math/cos b2))))
+
+          a2 (* 0.5 (Math/signum next-curve) b2)
+          [dx2 dy2] (geom/rotate-vector-2d direction2
+                                           (Math/cos (- a2)) (Math/sin (- a2)))
+
+          offset2 [(* dy2 end-x) end-y (* -1.0 dx2 end-x)]
+          position2 (vector-add offset2 [px2 py2 pz2])
+
+          [pdx pdy pdz] (vector-normalize (vector-sub position2 position))
+
+          [norm-x norm-z] (vector-normalize [pdx pdz])
+
+          rail-trans-z [pdx pdy pdz]
+          rail-trans-x [norm-z 0.0 (* -1.0 norm-x)]
+          rail-trans-y (vector-cross rail-trans-z rail-trans-x)
+
+          rail-transform (geom/transform-create-from-vectors
+                          rail-trans-x
+                          rail-trans-y
+                          rail-trans-z)
+
+          delta-x (- end-x start-x)
+          delta-y (- end-y start-y)
+
+          planar (Math/atan (/ dx block-length))
+          updown (Math/atan (/ dy block-length))]
+
+      {:planar planar
+       :updown updown
+       :rail-transform rail-transform })))
+
+(defn create-objects-for-block-and-rail [context block [railidx rail]]
+  (create-rail-objects block rail (:start-ref block)))
+
+(defn create-transform-for-block-and-rail [context block [railidx rail]]
+  (let [[dx dy] (:direction block)
+        height (:height block)
+        [rail-start-x rail-start-y] (:offset rail)
+        offset [(* dy rail-start-x) height (* -1 dx rail-start-x)]
+
+        position (:position block)
+        position (vector-add position offset)
+
+        next-block (:next-block block)
+
+        world-transforms (if (= railidx 0)
+                           (create-player-rail-transforms
+                            (:track-transform block))
+                           (create-transforms
+                            block next-block (:direction block) position
+                            (:curve block) height block-length))]
+    world-transforms))
+
+(defn create-objects-for-block2
+  [context block]
+  [context
+   [(apply
+      concat
+      (map #(create-objects-for-block-and-rail context block %) (:rails block)))]])
+
 (defn create-objects-for-block
   [context block]
   (let [context (create-base-transforms context)
@@ -444,7 +562,7 @@
          formobjs (create-form-objects
                    context block (filter #(route/is-type % "form") nodes))
 
-         railobjs (create-rail-objects block starting-distance)
+         ;railobjs (create-rail-objects rail starting-distance)
          wallobjs (create-wall-objects
                    (:walls context)
                    rails
@@ -453,7 +571,8 @@
                    starting-distance)]
       [(update-position context)
        ;(concat formobjs wallobjs objs railobjs)
-       (concat railobjs objs)
+       ;(concat railobjs objs)
+       [objs]
        ]
       )))
 
@@ -463,9 +582,21 @@
     :direction (:direction context)
     :track-transform (:track-transform context)))
 
+(defn create-transform-for-block [context block]
+  (let [rails (:rails block)]
+    (update-rails
+     rails
+     (into {} (map (fn [[railidx rail]]
+                     [railidx
+                      (merge
+                       (create-transform-for-block-and-rail
+                        context block [railidx rail])
+                       rail)]) (:rails block))))))
+
 (defn parse-block-information [context block symbol-table]
   (let
       [[context block] (annotate-block-with-rail-info context block symbol-table)
+       block (create-transform-for-block context block)
        context (prune-end-rails context)
 
        block (copy-geom-and-transform context block)
@@ -488,22 +619,23 @@
 (def cblock (nth bv 2))
 (def dblock (nth bv 3))
 
-(def blocks (take 8 bv))
+(def blocks (take 1 bv))
+(def ablocks (provide-forward-references blocks))
 (def ablocks (second
               (reduce (fn [[context blocks] block]
                         (let [[context block]
                               (parse-block-information context block s)]
                           [context (conj blocks block)]))
-                      [(create-starting-context s) []] blocks)))
-(def ablocks (provide-forward-references ablocks))
+                      [(create-starting-context s) []] ablocks)))
 (let [[context obj]
       (reduce (fn [[context objs] block]
-                (let [[context new-objs] (create-objects-for-block context block)]
+                (let [[context new-objs] (create-objects-for-block2 context block)]
                   [context
                    (concat objs new-objs)]))
               [(create-starting-context s) []]
               ablocks)]
   (def objs obj))
 
-(def m (doall (create-rail-objects (first ablocks) 1.0)))
-(keys (first m))
+;(def m (create-rail-objects (first ablocks) 1.0))
+;(println (count (:faces (first m))))
+;(println objs)
