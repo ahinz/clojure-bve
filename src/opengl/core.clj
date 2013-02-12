@@ -357,10 +357,10 @@
      (doseq [i (range (/ arraysize 4))]
        (let [[b1 b2 b3] (map (fn [_] (.get buffer)) (range 3))
              x (* i 4)]
-         (aset-byte array x b1)
-         (aset-byte array (+ x 1) b2)
-         (aset-byte array (+ x 2) b3)
-         (aset-byte array (+ x 3) -127)))
+         (aset-byte array (- arraysize 1 (+ x 3)) b1)
+         (aset-byte array (- arraysize 1 (+ x 2)) b2)
+         (aset-byte array (- arraysize 1 (+ x 1)) b3)
+         (aset-byte array (- arraysize 1 (+ x 0)) -127)))
 
      (= depth 8)
      (doseq [i (range (/ arraysize 4))]
