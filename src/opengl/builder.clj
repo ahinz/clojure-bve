@@ -77,10 +77,14 @@
 (defn- get-z [tx]
   (nth tx 2))
 
+(defn- read-string-if-not-empty [s]
+  (if (= (count (.trim s)) 0) nil
+      (read-string s)))
+
 (defn- split-body [node]
   (if (nil? node)
     []
-    (map read-string
+    (map read-string-if-not-empty
          (.split
           (.trim (route/trim-trailing-comma (:body node))) ";"))))
 
@@ -96,6 +100,25 @@
      rail-transform
      geom/identity-transform
      track-pos)))
+
+(defn create-signal-objects
+  [context block player-rail]
+  (map
+   (fn [signal]
+     (let [rail-transform (:rail-transform player-rail)
+           position (rotate-free-obj rail-transform
+                                     (:position player-rail)
+                                     (:position signal))]
+       (create-transformed-object
+        (second (first (:prototypes signal)))
+        position
+        rail-transform
+        (geom/transform-create (:yaw signal)
+                               (:pitch signal)
+                               (:roll signal))
+        (:track-pos signal))))
+   (:signals block)))
+
 
 (defn create-free-objects
   [freeobjs block rail track-pos]
@@ -255,6 +278,58 @@
                   rails (:nodes-in-block (:next-block block))))]
     [(assoc context :rails new-rails)
      (assoc block :rails new-rails)]))
+
+(def signal-translate
+  {2 0
+   -2 1
+   3 2
+   4 3
+   -4 4
+   5 5
+   -5 6
+   6 7})
+
+(defn load-signal-object [signal_name]
+  (core/b3d-parse-file (java.io.File. (str "compatibility/signals/" signal_name ".csv"))))
+
+(defn create-signal-object [index [aspects names]]
+  {index (into {} (map (fn [aspect name] [aspect (load-signal-object name)]) aspects names))})
+
+(def signals
+  (into {} (map-indexed
+    create-signal-object
+    [[[0 2] ["signal_2_0" "signal_2a_2"]]
+     [[0 4] ["signal_2_0" "signal_2b_4"]]
+     [[0 2 4] ["signal_3_0" "signal_3_2" "signal_3_4"]]
+     [[0 1 2 4] ["signal_4_0" "signal_4a_1" "signal_4a_2" "signal_4a_4"]]
+     [[0 2 3 4] ["signal_4_0" "signal_4b_2" "signal_4b_3" "signal_4b_4"]]
+     [[0 1 2 3 4] ["signal_5_0" "signal_5a_1" "signal_5_2" "signal_5_3" "signal_5_4"]]
+     [[0 2 3 4 5] ["signal_5_0" "signal_5_2" "signal_5_3" "signal_5_4" "signal_5b_5"]]
+     [[0 1 2 3 4 5] ["signal_6_0" "signal_6_1" "signal_6_2" "signal_5_3" "signal_6_4" "signal_6_5"]]
+     [[0 3 4] ["repeatingsignal_0" "repeatingsignal_3" "repeatingsignal_4"]]])))
+
+(defn annotate-block-with-signals
+  [context block sym-tbl]
+  [context
+   (assoc block :signals
+          (map (fn [node]
+                 (let [[aspects _ x y yaw pitch roll] (split-body node)
+                       yaw (or yaw 0.0)
+                       pitch (or pitch 0.0)
+                       roll (or roll 0.0)
+                       track-pos (float (read-string (:track-ref node)))
+                       dz (- track-pos (:start-ref block))
+                       ]
+                   {:track-pos track-pos
+                    :prototypes (get signals (get signal-translate aspects))
+                    :position [x y dz]
+                    ;; These funky constants are from the OpenBVE source
+                    :yaw (* 0.0174532925199433 yaw)
+                    :pitch (* 0.0174532925199433 pitch)
+                    :roll (* 0.0174532925199433 roll)}))
+               (filter #(or
+                         (route/is-type % "signal")
+                         (route/is-type % "sig")) (:nodes-in-block block))))])
 
 (defn annotate-block-with-rail-info
   [context block sym-tbl]
@@ -543,7 +618,9 @@
       (map #(create-objects-for-block-and-rail context block %) (:rails block)))]
     (create-form-objects
      context block
-     (filter #(route/is-type % "form") (:nodes-in-block block))))])
+     (filter #(route/is-type % "form") (:nodes-in-block block)))
+    (create-signal-objects
+     context block (get (:rails block) 0)))])
 
 (defn create-transform-for-block-and-rail [context block [railidx rail]]
   (let [direction (:direction block)
@@ -617,6 +694,7 @@
                          context block symbol-table)
        [context block] (annotate-block-with-wall-info context block symbol-table)
        [context block] (annotate-block-with-freeobj-info context block symbol-table)
+       [context block] (annotate-block-with-signals context block symbol-table)
 
        block (update-transforms-for-curves context block)
        block (create-transform-for-block context block)

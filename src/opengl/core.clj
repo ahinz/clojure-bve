@@ -72,7 +72,11 @@
 
 ;; TODO- Explicitly reject nighttime textures for now
 (defn b3d-parse-load [line]
-  (-> line (.substring 4) (.split ",") first .trim))
+  (-> line (.substring 4) (.split ",") first .trim (.replaceAll "\\\\" "/")))
+
+(defn b3d-parse-load2 [line]
+  (-> line (.split ",") second .trim (.replaceAll "\\\\" "/")))
+
 
 (defn b3d-push-vertex [context vertex]
   (let [verts (:verts (:active context))]
@@ -119,8 +123,14 @@
     (assoc context :active mesh-with-color)))
 
 
+(defn strip-non-ascii [string]
+  (.replaceAll string "[^\\x00-\\x7F]" ""))
+
 (defn starts-with [thing prefix]
-  (-> thing .toLowerCase (.startsWith (.toLowerCase prefix))))
+  (-> thing strip-non-ascii .toLowerCase (.startsWith (.toLowerCase prefix))))
+
+(defn- c-split [s]
+  (map read-string (rest (.split s ","))))
 
 (defn handle-line [line linenum context]
   (let [context (assoc context :line line :linenum (+ 1 linenum))]
@@ -131,23 +141,54 @@
      context
 
      ;; Mesh
-     (starts-with line "[MeshBuilder]")
+     (or (starts-with line "[MeshBuilder]")
+         (starts-with line "createmeshbuilder"))
      (b3d-push-mesh-builder context)
 
-     (starts-with line "Vertex") (b3d-push-vertex context (b3d-parse-vertex-line line))
-     (starts-with line "Face") (b3d-push-face context (b3d-parse-face-line line) true)
-     (starts-with line "Face2") (b3d-push-face context (b3d-parse-face-2-line line) false)
+     (starts-with line "AddVertex")
+     (b3d-push-vertex context (c-split line))
+
+     (starts-with line "Vertex")
+     (b3d-push-vertex context (b3d-parse-vertex-line line))
+
+     (starts-with line "Face")
+     (b3d-push-face context (b3d-parse-face-line line) false)
+
+     (starts-with line "Face2")
+     (b3d-push-face context (b3d-parse-face-2-line line) true)
+
+     (starts-with line "AddFace")
+     (b3d-push-face context (c-split line) false)
+
      (starts-with line "Color") (b3d-set-active-color context (b3d-parse-color-line line))
-     (starts-with line "Transparent") (b3d-set-transp-color context (b3d-parse-transp-line line))
+     (starts-with line "Transparent")
+     (b3d-set-transp-color context (b3d-parse-transp-line line))
 
      ;; Texture
      (= "[Texture]" line)
      context
 
-     (starts-with line "Load") (b3d-set-texture-path context (b3d-parse-load line))
-     (starts-with line "Coordinates") (b3d-push-texture-coordinate context (b3d-parse-prefix-line line "Coordinates"))
+     (starts-with line "LoadTexture")
+     (b3d-set-texture-path context (b3d-parse-load2 line))
 
-     :else (b3d-set-error context (str "Invalid line: " line))
+     (starts-with line "Load")
+     (b3d-set-texture-path context (b3d-parse-load line))
+
+     (starts-with line "SetTextureCoordinates")
+     (b3d-push-texture-coordinate context (c-split line))
+
+     (starts-with line "Coordinates")
+     (b3d-push-texture-coordinate context (b3d-parse-prefix-line line "Coordinates"))
+
+     ;; TODO: Implement
+     (starts-with line "SetEmissiveColor")
+     context
+
+     ;; TODO: Implement
+     (starts-with line "SetBlendMode")
+     context
+
+     :else (b3d-set-error context (str "Invalid line: " line " (line " linenum ")"))
      )))
 
 (defn handle-line-safe [line linenum context])

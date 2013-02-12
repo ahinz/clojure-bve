@@ -6,6 +6,7 @@
    [opengl.geom :as geom]
    [opengl.builder :as builder]]
   [:import
+   (javax.imageio ImageIO)
    (javax.swing JFrame)
    (javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2 TraceGL2)
    (javax.media.opengl.awt GLCanvas)
@@ -25,21 +26,60 @@
 (defn gl-create-texture [^GL2 gl]
   (first (gl-create-textures gl 1)))
 
+(defn gl-bind-texture-to-buffer [gl tid width height buffer]
+  (doto gl
+    (.glBindTexture GL/GL_TEXTURE_2D tid)
+    (.glTexParameteri GL/GL_TEXTURE_2D GL/GL_TEXTURE_WRAP_S GL/GL_REPEAT)
+    (.glTexParameteri GL/GL_TEXTURE_2D GL/GL_TEXTURE_WRAP_T GL/GL_REPEAT)
+    (.glTexParameteri GL/GL_TEXTURE_2D GL/GL_TEXTURE_MAG_FILTER GL/GL_LINEAR)
+    (.glTexParameteri GL/GL_TEXTURE_2D GL/GL_TEXTURE_MIN_FILTER GL/GL_LINEAR)
+    (.glTexImage2D GL/GL_TEXTURE_2D 0 GL/GL_RGBA
+                   width height 0 GL/GL_BGRA
+                   GL/GL_UNSIGNED_BYTE buffer))
+  tid)
+
+;; TODO: Could probably do this for BMP as well
+(defn gl-bind-texture-to-png [gl tid png]
+  (let [buffered-image (ImageIO/read (java.io.File. png))
+        width (.getWidth buffered-image)
+        height (.getHeight buffered-image)
+        data (byte-array (* width height 4))]
+    (doseq [x (range width)
+            y (range height)]
+      (let [color (.getRGB buffered-image x y)
+            i (* 4 (+ (* y width) x))]
+        ;; color is ARGB, but we're going to
+        ;; load it as BGRA
+        (aset-byte data (+ i 3) (unchecked-byte
+                                 (bit-and 0xff (bit-shift-right color 24))))
+        (aset-byte data (+ i 2) (unchecked-byte
+                                 (bit-and 0xff (bit-shift-right color 16))))
+        (aset-byte data (+ i 1) (unchecked-byte
+                                 (bit-and 0xff (bit-shift-right color 8))))
+        (aset-byte data (+ i 0) (unchecked-byte
+                                 (bit-and 0xff color)))))
+
+    (gl-bind-texture-to-buffer gl tid width height
+                               (java.nio.ByteBuffer/wrap data))))
+
 (defn gl-bind-texture-to-bmp [gl tid bmp]
-  (println "Bound " tid " to " (:file bmp))
-  (let [width (:width bmp)
-        height (:height bmp)
-        buffer (core/bmp-data-into-buffer bmp)]
-    (doto gl
-      (.glBindTexture GL/GL_TEXTURE_2D tid)
-      (.glTexParameteri GL/GL_TEXTURE_2D GL/GL_TEXTURE_WRAP_S GL/GL_REPEAT)
-      (.glTexParameteri GL/GL_TEXTURE_2D GL/GL_TEXTURE_WRAP_T GL/GL_REPEAT)
-      (.glTexParameteri GL/GL_TEXTURE_2D GL/GL_TEXTURE_MAG_FILTER GL/GL_LINEAR)
-      (.glTexParameteri GL/GL_TEXTURE_2D GL/GL_TEXTURE_MIN_FILTER GL/GL_LINEAR)
-      (.glTexImage2D GL/GL_TEXTURE_2D 0 GL/GL_RGBA
-                    width height 0 GL/GL_BGRA
-                    GL/GL_UNSIGNED_BYTE buffer))
-    tid))
+  (let [meta (core/bmp-meta-read-file bmp)]
+    (gl-bind-texture-to-buffer gl
+                             tid
+                             (:width meta)
+                             (:height meta)
+                             (core/bmp-data-into-buffer meta))))
+
+(defn gl-bind-texture-to-file [gl tid file]
+  (println "Loading texture" file "in to gl texture slot" tid)
+  (cond
+   (.endsWith (.toString file) ".bmp")
+   (gl-bind-texture-to-bmp gl tid file)
+
+   (.endsWith (.toString file) ".png")
+   (gl-bind-texture-to-png gl tid file)
+
+   :else (throw (Exception. (str "Not sure how to load image: " file)))))
 
 (defn gl-enable-texture-2d [gl]
   (.glEnable gl GL/GL_TEXTURE_2D)
@@ -55,9 +95,9 @@
   (.glDisable gl GL/GL_TEXTURE_2D))
 
 (defn gl-load-single-texture [gl file]
-  (gl-bind-texture-to-bmp gl
-                          (gl-create-texture gl)
-                          (core/bmp-meta-read-file file)))
+  (gl-bind-texture-to-file gl
+                            (gl-create-texture gl)
+                            file))
 
 (defn gl-mutable-load-and-save-single-texture [gl file]
   (let [t (gl-load-single-texture gl file)]
@@ -139,7 +179,7 @@
     (dosync
      (doseq [[file tid] (map list not-loaded-files texture-ids)]
        (alter textures assoc file
-              (gl-bind-texture-to-bmp gl tid (core/bmp-meta-read-file file)))
+              (gl-bind-texture-to-file gl tid file))
        not-loaded-files texture-ids))))
 
 (defn gl-render-mesh [gl mesh]
@@ -286,5 +326,5 @@
 ;(set-center canvas 0.0 0.0 400.0)
 ;(set-looking-at canvas 1.0 5.0 -10.0)
 ;(set-looking-at canvas 1.0 5.0 50.0)
-(set-looking-at canvas 1.0 3.0 110.0)
+(set-looking-at canvas 1.0 3.0 60.0)
 ;(set-looking-at canvas 1.0 3.0 10.0)
