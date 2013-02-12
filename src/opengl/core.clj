@@ -3,6 +3,8 @@
    [opengl.models :as m]]
   (:gen-class))
 
+(set! *warn-on-reflection* true)
+
 (defrecord Face [verts transp two-sided])
 (defrecord Mesh [verts faces color texture blend texture-coords])
 
@@ -32,10 +34,6 @@
 
 (defrecord TextureCoord [vertex x y])
 
-(defmethod clojure.core/print-method Mesh [x writer]
-  (.write writer (str "#Mesh(" (count (:faces x)) " face" (if (not= 1 (count (:faces x))) "s")
-                      " Textures: " (:texture x) " (" (count (:texture-coords x)) "))")))
-
 (defn b3d-build-mesh [mesh]
   (Mesh. (:verts mesh) (:faces mesh) (:color mesh)
          (:texture-path mesh) (:blend mesh) (:texture-coords mesh)))
@@ -55,7 +53,7 @@
 (defn b3d-set-error [context err]
   (assoc context :error err))
 
-(defn b3d-parse-prefix-line [line prefix]
+(defn b3d-parse-prefix-line [^String line ^String prefix]
   (map read-string
        (.split
         (.substring line (count prefix))
@@ -73,7 +71,7 @@
   (b3d-assoc-active context :texture-path (str (:path context) java.io.File/separator  path)))
 
 (defn b3d-set-blend-mode [context parts]
-  (let [[mode glow-half glow-mode] parts]
+  (let [[^String mode ^String glow-half ^String glow-mode] parts]
     (b3d-assoc-active context :blend
                       {:mode (.toLowerCase mode)
                        :glow (if (and glow-half glow-mode)
@@ -81,11 +79,16 @@
                                 :half (read-string glow-half)})})))
 
 ;; TODO- Explicitly reject nighttime textures for now
-(defn b3d-parse-load [line]
-  (-> line (.substring 4) (.split ",") first .trim (.replaceAll "\\\\" "/")))
+;; These are used for typing first and second to string
+(defn- trim [^String s] (.trim s))
+(defn- replace-windows-path-chars [^String s]
+  (.replaceAll s "\\\\" "/"))
 
-(defn b3d-parse-load2 [line]
-  (-> line (.split ",") second .trim (.replaceAll "\\\\" "/")))
+(defn b3d-parse-load [^String line]
+  (-> line (.substring 4) (.split ",") first trim replace-windows-path-chars))
+
+(defn b3d-parse-load2 [^String line]
+  (-> line (.split ",") second trim replace-windows-path-chars))
 
 
 (defn b3d-push-vertex [context vertex]
@@ -133,16 +136,19 @@
     (assoc context :active mesh-with-color)))
 
 
-(defn strip-non-ascii [string]
+(defn strip-non-ascii [^String string]
   (.replaceAll string "[^\\x00-\\x7F]" ""))
 
-(defn starts-with [thing prefix]
-  (-> thing strip-non-ascii .toLowerCase (.startsWith (.toLowerCase prefix))))
+(defn- lower-case [^String l] (.toLowerCase l))
+(defn- str-starts-with [^String s1 ^String s2] (.startsWith s1 s2))
 
-(defn- c-split [s]
+(defn starts-with [^String thing ^String prefix]
+  (-> thing strip-non-ascii lower-case (str-starts-with (lower-case prefix))))
+
+(defn- c-split [^String s]
   (map read-string (rest (.split s ","))))
 
-(defn handle-line [line linenum context]
+(defn handle-line [^String line linenum context]
   (let [context (assoc context :line line :linenum (+ 1 linenum))]
     (cond
      (or
@@ -203,14 +209,14 @@
 
 (defn handle-line-safe [line linenum context])
 
-(defn strip-comment [str]
+(defn strip-comment [^String str]
   (let [idx (.lastIndexOf str ";")]
     (.trim
      (if (> idx 0)
        (.substring str 0 idx)
        str))))
 
-(defn handle-lines [reader context linenum]
+(defn handle-lines [^java.io.BufferedReader reader context linenum]
   (let [line (.readLine reader)
         end-of-stream? (= line nil)
         error (:error context)]
@@ -230,7 +236,7 @@
 
 (defn parse-object-folder [^String folder-path]
   (let [file (java.io.File. folder-path)]
-    (reduce (fn [[success errors] obj-path]
+    (reduce (fn [[success errors] ^java.io.File obj-path]
               (if (.endsWith (.getName obj-path) ".b3d")
                 (do
                   (println "Parsing " obj-path)
@@ -248,7 +254,7 @@
      (.map channel java.nio.channels.FileChannel$MapMode/READ_ONLY 0 (.size channel))
      java.nio.ByteOrder/LITTLE_ENDIAN)))
 
-(defn bmp-read-header [buffer context]
+(defn bmp-read-header [^java.nio.ByteBuffer buffer context]
   (assoc context
     :id (str ( char (.get buffer)) (char (.get buffer)))
     :size (.getInt buffer)
@@ -282,7 +288,7 @@
     (assoc context :ncolors (int (Math/pow 2 (:color-depth context))))
     context))
 
-(defn bmp-read-dib [buffer context]
+(defn bmp-read-dib [^java.nio.ByteBuffer buffer context]
   (if (not (:error context))
     (assoc context
       :dib-size (.getInt buffer)
@@ -298,7 +304,7 @@
       :nimport (.getInt buffer))
     context))
 
-(defn bmp-read-color-table-color [buffer]
+(defn bmp-read-color-table-color [^java.nio.ByteBuffer buffer]
   [(.get buffer) (.get buffer) (.get buffer) (.get buffer)])
 
 (defn bmp-append-color-to-color-table [context color]
@@ -330,7 +336,7 @@
          (bmp-save-file-ref file))))
 
 (defn bmp-buffer-at-data [metadata]
-  (let [buffer (get-byte-buffer (:file metadata))]
+  (let [^java.nio.ByteBuffer buffer (get-byte-buffer (:file metadata))]
     (.position buffer (:start-offset metadata))))
 
 (defn color3f-as-int [[c1 c2 c3 c4]]
@@ -343,7 +349,7 @@
 (defn bmp-data-into-array [metadata]
   (let [color-table (:color-table metadata)
         depth (:color-depth metadata)
-        buffer (bmp-buffer-at-data metadata)
+        buffer ^java.nio.ByteBuffer (bmp-buffer-at-data metadata)
         arraysize (* (:height metadata) (:width metadata) 4)
         array (byte-array arraysize)]
     (cond

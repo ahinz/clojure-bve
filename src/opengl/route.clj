@@ -2,7 +2,9 @@
   [:require [opengl.core :as core]]
   (:gen-class))
 
-(defn- strip-comment [line]
+(set! *warn-on-reflection* true)
+
+(defn- strip-comment [^String line]
   (let [idx (.indexOf line ";")]
     (if (> 0 idx)
       line
@@ -13,7 +15,7 @@
 
 (defn resolve-symbol-table [context]
   (let [symbol-table (:symbol-table context)]
-    (reduce (fn [context [k v]]
+    (reduce (fn [context [k ^String v]]
               (try
                 (let [b3d (core/b3d-parse-file (java.io.File. v))]
                   (if (:error b3d)
@@ -30,15 +32,20 @@
     (assoc context :symbol-table
            (assoc symbol-table (str command index) file))))
 
-(defn trim-trailing-comma [s]
+(defn trim-trailing-comma [^String s]
   (if (= \, (last s))
     (.substring s 0 (- (count s) 1))
     s))
 
-(defn trim-forward-slash [s]
+(defn trim-forward-slash [^String s]
   (if (= (first s) \/)
     (.substring s 1)
     s))
+
+(defn- replace-all [^String base ^String pattern ^String repl]
+  (.replaceAll base pattern repl))
+(defn- trim [^String a] (.trim a))
+(defn- equals-ignore-case [^String a ^String b] (.equalsIgnoreCase a b))
 
 (defn- load-structure [context]
   (reduce
@@ -48,10 +55,11 @@
                                (:arg node)
                                (strip-comment
                                 (trim-forward-slash
-                                 (trim-trailing-comma (.trim (.replaceAll (:body node) "\\\\" "/")))))))
+                                 (trim-trailing-comma
+                                  (trim (replace-all (:body node) "\\\\" "/")))))))
    context
    (filter
-    #(.equalsIgnoreCase (:prefix %) "structure")
+    #(equals-ignore-case (:prefix %) "structure")
     (:nodes context))))
 
 (defn- convert-node-to-error [node descr]
@@ -81,7 +89,7 @@
             (:line (:fileinfo node)))
     (println "AST(" (:type node) (assoc node :fileinfo nil) ")")))
 
-(defn- substr [str e]
+(defn- substr [^String str e]
   (.trim (.substring str e)))
 
 (defn- parse-simple-prefix [line]
@@ -104,14 +112,14 @@
    "crackl" "crackr"])
 
 (defn- create-node-from-prefix [line line-num file]
-  (let [[_ pfx _ cmd _ arg sfx rest] (prefixed-line line)
+  (let [[_ pfx _ ^String cmd _ arg sfx rest] (prefixed-line line)
         cmd (.trim (.toLowerCase cmd))]
     (if (some #{cmd} allowed-commands)
       (create-node cmd line line-num file { :prefix pfx :body rest :arg arg :suffix sfx})
       (create-error line line-num file (str "Unknown Command: " cmd)))
     ))
 
-(defn- parse-route-line [idx line file]
+(defn- parse-route-line [idx ^String line file]
   (cond
    (= (count (.trim line)) 0)
    nil
@@ -126,7 +134,7 @@
    [(create-node-from-prefix line idx file)]
 
    (num-prefixed-line line)
-   (let [[_ num subcommands] (num-prefixed-line line)
+   (let [[_ num ^String subcommands] (num-prefixed-line line)
          subcommands (.split subcommands ",")]
      (into [(create-track-ref-node num line idx file)]
            (map #(parse-route-line idx % file) subcommands)))
@@ -159,7 +167,7 @@
   (assoc context :nodes
          (let [nodes (:nodes context)]
            (map (fn [node]
-                  (if (and (.equalsIgnoreCase (:prefix node) "track")
+                  (if (and (equals-ignore-case (:prefix node) "track")
                            (nil? (:track-ref node))
                            (not (some #{(:type node)} track-nodes-not-required-to-have-refs)))
                     (convert-node-to-error node (str "Track command must have a reference"))
@@ -188,14 +196,14 @@
                     [nil []]
                     nodes)))))
 
-
+(defn- split [^String s ^String p] (.split s p))
 (defn parse-route-file [^String file-path]
   (let [nodes (filter
                (comp not nil?)
                (flatten
                 (map-indexed (fn [idx itm]
                                (parse-route-line idx itm file-path))
-                             (.split (slurp file-path) "\n"))))
+                             (split (slurp file-path) "\n"))))
         context {:nodes nodes :symbol-table {} :errors []}]
     (-> context
         update-prefixes

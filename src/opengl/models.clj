@@ -3,6 +3,8 @@
    [opengl.geom :as geom]]
   (:gen-class))
 
+(set! *warn-on-reflection* true)
+
 ;;;;;; Rendering Models
 
 (defrecord Vertex

@@ -1,6 +1,8 @@
 (ns opengl.geom
   (:gen-class))
 
+(set! *warn-on-reflection* true)
+
 (defrecord V3f [^float x ^float y ^float z])
 (defn v3f [x y z] (V3f. x y z))
 (defn v3f-as-vector [v] [(:x v) (:y v) (:z v)])

@@ -8,11 +8,14 @@
   [:import
    (javax.imageio ImageIO)
    (javax.swing JFrame)
-   (javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2 TraceGL2)
+   (javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2 TraceGL2 GLAutoDrawable)
    (javax.media.opengl.awt GLCanvas)
    (javax.media.opengl.glu.gl2 GLUgl2)
    (com.jogamp.opengl.util FPSAnimator)]
   (:gen-class))
+
+
+(set! *warn-on-reflection* true)
 
 (def textures (ref {}))
 
@@ -26,7 +29,8 @@
 (defn gl-create-texture [^GL2 gl]
   (first (gl-create-textures gl 1)))
 
-(defn gl-bind-texture-to-buffer [gl tid width height buffer]
+(defn gl-bind-texture-to-buffer
+  [^GL2 gl ^Integer tid ^Integer width ^Integer height ^java.nio.ByteBuffer buffer]
   (doto gl
     (.glBindTexture GL/GL_TEXTURE_2D tid)
     (.glTexParameteri GL/GL_TEXTURE_2D GL/GL_TEXTURE_WRAP_S GL/GL_REPEAT)
@@ -39,7 +43,7 @@
   tid)
 
 ;; TODO: Could probably do this for BMP as well
-(defn gl-bind-texture-to-png [gl tid png]
+(defn gl-bind-texture-to-png [gl tid ^String png]
   (let [buffered-image (ImageIO/read (java.io.File. png))
         width (.getWidth buffered-image)
         height (.getHeight buffered-image)
@@ -69,28 +73,28 @@
                              (:height meta)
                              (core/bmp-data-into-buffer meta))))
 
-(defn gl-bind-texture-to-file [gl tid file]
+(defn gl-bind-texture-to-file [gl tid ^String file]
   (println "Loading texture" file "in to gl texture slot" tid)
   (cond
-   (.endsWith (.toString file) ".bmp")
+   (.endsWith file ".bmp")
    (gl-bind-texture-to-bmp gl tid file)
 
-   (.endsWith (.toString file) ".png")
+   (.endsWith file ".png")
    (gl-bind-texture-to-png gl tid file)
 
    :else (throw (Exception. (str "Not sure how to load image: " file)))))
 
-(defn gl-enable-texture-2d [gl]
+(defn gl-enable-texture-2d [^GL2 gl]
   (.glEnable gl GL/GL_TEXTURE_2D)
   ;(.glTexEnv gl GL2/GL_TEXTURE_ENV GL2/GL_TEXTURE_ENV_MODE GL2/GL_MODULATE)
   )
 
-(defn gl-bind-current-texture [gl texture]
+(defn gl-bind-current-texture [^GL2 gl texture]
   (let [tid (:gl-tid texture)]
     (if tid
       (.glBindTexture gl GL/GL_TEXTURE_2D tid))))
 
-(defn gl-disable-texture [gl]
+(defn gl-disable-texture [^GL2 gl]
   (.glDisable gl GL/GL_TEXTURE_2D))
 
 (defn gl-load-single-texture [gl file]
@@ -118,7 +122,7 @@
      :color (:color colors)}))
 
 
-(defn gl-render-vertex [gl vertex]
+(defn gl-render-vertex [^GL2 gl vertex]
   (let [tcoord (:texture-coordinate vertex)
         [x y z] (:coordinate vertex)
         [nx ny nz] (:normal vertex)]
@@ -130,7 +134,7 @@
 
     (.glVertex3f gl x y z)))
 
-(defn gl-render-face [gl face]
+(defn gl-render-face [^GL2 gl face]
   (let [material (:material face)
         blend-mode (:blend-mode material)
         texture-info (mutable-create-or-get-texture-for-material gl material)
@@ -144,7 +148,7 @@
 
     (if (:mode blend-mode)
       (if (= (:mode blend-mode) "additive")
-        (.glBlendFunc gl GL/GL_ONE GL/GL_ONE)
+        (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE)
         (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
       (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
 
@@ -202,7 +206,7 @@
 ;(def q-mesh (core/b3d-parse-file (java.io.File. "Flushing/bldg17.b3d")))
 ;(def q-mesh (core/b3d-parse-file (java.io.File. "Flushing/SheaStadium.b3d")))
 
-(defn gl-draw-axis [gl]
+(defn gl-draw-axis [^GL2 gl]
   (doto gl
     (.glBegin GL/GL_LINES)
     (.glColor3f 1.0 0.0 0.0)
@@ -224,14 +228,17 @@
         :meshes (filter identity builder/objs)
     }))
 
-(defn glu-look-at [glu ex ey ez cx cy cz ux uy uz]
+(defn glu-look-at [^GLUgl2 glu
+                   ^Double ex ^Double ey ^Double ez
+                   ^Double cx ^Double cy ^Double cz
+                   ^Double ux ^Double uy ^Double uz]
   (.gluLookAt glu ex ey ez cx cy cz ux uy uz))
 
 (defn create-event-proxy [w h]
   (proxy [GLEventListener] []
-    (display [drawable]
-      (let [gl (.getGL drawable)
-            glu (GLUgl2.)
+    (display [^GLAutoDrawable drawable]
+      (let [^GL2 gl (.getGL drawable)
+            ^GLUgl2 glu (GLUgl2.)
             context @gl-context
             camera (:camera context)
             objs (:meshes context)]
@@ -249,7 +256,7 @@
                (concat [glu]
                        (:eye camera) (:center camera) [0.0 1.0 0.0]))
 
-        (.glScalef gl -1.0 1.0 1.0)
+        (.glScalef gl (float -1.0) 1.0 1.0)
 
         (doseq [meshes-from-b3d objs]
           (doseq [mesh meshes-from-b3d]
@@ -257,11 +264,11 @@
 
         (gl-draw-axis gl)))
     (displayChanged [drawable modeChanged deviceChanged] (println "DC"))
-    (init [drawable]
+    (init [^GLAutoDrawable drawable]
       (.setGL drawable (DebugGL2. (.getGL drawable)))
       ;(.setGL drawable (TraceGL2. (.getGL drawable) System/out))
-      (let [gl (.getGL drawable)
-            glu (GLUgl2.)
+      (let [^GL2 gl (.getGL drawable)
+            ^GLUgl2 glu (GLUgl2.)
             aspect (float (/ w h))]
 
         (.glViewport gl 0 0 w h)
@@ -337,5 +344,5 @@
 ;(set-looking-at canvas 1.0 5.0 50.0)
 (set-looking-at canvas 1.0 3.0 60.0)
 ;(set-looking-at canvas 1.0 3.0 10.0)
-(set-center canvas 30.0 0.0 400.0)
-(set-looking-at canvas 19.0 3.0 350.0)
+(set-center canvas 40.0 0.0 500.0)
+(set-looking-at canvas 23.0 3.0 400.0)

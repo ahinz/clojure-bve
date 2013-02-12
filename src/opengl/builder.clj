@@ -6,6 +6,8 @@
    [opengl.route :as route]]
   (:gen-class))
 
+(set! *warn-on-reflection* true)
+
 (def block-length 25)
 
 (defn- partition-into-blocks [nodes block-length]
@@ -77,7 +79,7 @@
 (defn- get-z [tx]
   (nth tx 2))
 
-(defn- read-string-if-not-empty [s]
+(defn- read-string-if-not-empty [^String s]
   (if (= (count (.trim s)) 0) nil
       (read-string s)))
 
@@ -86,7 +88,7 @@
     []
     (map read-string-if-not-empty
          (.split
-          (.trim (route/trim-trailing-comma (:body node))) ";"))))
+          (.trim ^String (route/trim-trailing-comma (:body node))) ";"))))
 
 (defn create-rail-objects
   [block rail track-pos]
@@ -170,7 +172,7 @@
               track-pos) (:prototypes wall))))
     []))
 
-(defn- fatal-error [s]
+(defn- fatal-error [^String s]
   (throw (Exception. s)))
 
 (defn- fatal-error-missing-rail [railidx node]
@@ -330,7 +332,8 @@
                        dz (- track-pos (:start-ref block))
                        ]
                    {:track-pos track-pos
-                    :prototypes (nth signals (- aspects 3))
+                    :prototypes (nth signals aspects ;(- aspects 3)
+                                     )
                     :position [x y dz]
                     ;; These funky constants are from the OpenBVE source
                     :yaw (* 0.0174532925199433 yaw)
@@ -524,8 +527,8 @@
   (map - v1 v2))
 
 (defn vector-normalize [v1]
-  (let [t (Math/sqrt (apply + (map #(* % %) v1)))]
-    (if (= t 0)
+  (let [t ^Double (Math/sqrt (apply + (map #(* % %) v1)))]
+    (if (= t 0.0)
       v1
       (map #(/ % t) v1))))
 
@@ -576,12 +579,12 @@
         height2 (* slope2 block-length)
 
         b2 (if (= 0.0 next-curve) 0.0
-               (/ slope2 (Math/abs next-curve)))
+               (/ slope2 (Math/abs ^Double next-curve)))
 
         block-interval2 (Math/sqrt
                          (* 2.0 next-curve next-curve (- 1.0 (Math/cos b2))))
 
-        a2 (* 0.5 (Math/signum next-curve) b2)
+        a2 (* 0.5 (Math/signum ^Double next-curve) b2)
         [dx2 dy2] (geom/rotate-vector-2d direction2
                                          (Math/cos (- a2)) (Math/sin (- a2)))
 
@@ -681,9 +684,9 @@
         [rad cant] (map float (split-body curve))
         cant (or cant 0.0)]
     (if (and curve (not (= 0.0 rad)))
-      (let [b (/ block-length (Math/abs rad))
+      (let [b (/ block-length (Math/abs ^Double rad))
             c (Math/sqrt (* 2.0 rad rad (- 1.0 (Math/cos b))))
-            a (* -1.0 0.5 (Math/signum rad) b)]
+            a (* -1.0 0.5 (Math/signum ^Double rad) b)]
         (update-block-directions
          block
          rad
