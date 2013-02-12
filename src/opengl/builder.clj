@@ -730,7 +730,7 @@
 (def cblock (nth bv 2))
 (def dblock (nth bv 3))
 
-(def blocks (take 10 bv))
+(def blocks (take 20 bv))
 (def ablocks (provide-forward-references blocks))
 (def ablocks (second
               (reduce (fn [[context blocks] block]

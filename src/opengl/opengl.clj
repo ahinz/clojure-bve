@@ -134,7 +134,7 @@
   (let [material (:material face)
         blend-mode (:blend-mode material)
         texture-info (mutable-create-or-get-texture-for-material gl material)
-        color (:color texture-info)
+        color (:color (:color-set material))
         verts (:verts face)
         uses-glow-attn (:mode (:glow blend-mode))]
 
@@ -150,7 +150,7 @@
 
     (if color
       (let [[r g b] color]
-        (.glColor3f gl r g b))
+        (.glColor3f gl (/ r 255.0) (/ g 255.0) (/ b 255.0)))
       (.glColor3f gl 1.0 1.0 1.0))
 
     (if (:two-sided face)
@@ -337,3 +337,5 @@
 ;(set-looking-at canvas 1.0 5.0 50.0)
 (set-looking-at canvas 1.0 3.0 60.0)
 ;(set-looking-at canvas 1.0 3.0 10.0)
+(set-center canvas 30.0 0.0 400.0)
+(set-looking-at canvas 19.0 3.0 350.0)
