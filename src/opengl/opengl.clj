@@ -56,9 +56,8 @@
                                  (bit-and 0xff (bit-shift-right color 16))))
         (aset-byte data (+ i 1) (unchecked-byte
                                  (bit-and 0xff (bit-shift-right color 8))))
-        (aset-byte data (+ i 0) (unchecked-byte
+        (aset-byte data    i    (unchecked-byte
                                  (bit-and 0xff color)))))
-
     (gl-bind-texture-to-buffer gl tid width height
                                (java.nio.ByteBuffer/wrap data))))
 
@@ -133,13 +132,21 @@
 
 (defn gl-render-face [gl face]
   (let [material (:material face)
+        blend-mode (:blend-mode material)
         texture-info (mutable-create-or-get-texture-for-material gl material)
         color (:color texture-info)
-        verts (:verts face)]
+        verts (:verts face)
+        uses-glow-attn (:mode (:glow blend-mode))]
 
     (when (:gl-tid texture-info)
       (gl-enable-texture-2d gl)
       (gl-bind-current-texture gl texture-info))
+
+    (if (:mode blend-mode)
+      (if (= (:mode blend-mode) "additive")
+        (.glBlendFunc gl GL/GL_ONE GL/GL_ONE)
+        (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
+      (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
 
     (if color
       (let [[r g b] color]
@@ -158,8 +165,9 @@
 
     (.glBegin gl GL2/GL_POLYGON)
 
-    (doseq [vert verts]
-      (gl-render-vertex gl vert))
+    (if (not uses-glow-attn)
+     (doseq [vert verts]
+       (gl-render-vertex gl vert)))
 
     (.glEnd gl)
 
@@ -267,6 +275,7 @@
                     0.0 1.0 0.0)    ; up direction
 
         (.glClearDepth gl 1.0)
+        (.glEnable gl GL/GL_BLEND)
         (.glEnable gl GL/GL_DEPTH_TEST)
         (.glDepthFunc gl GL/GL_LEQUAL)
         ;(.glDisable gl GL/GL_LIGHTING)

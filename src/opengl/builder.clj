@@ -101,6 +101,21 @@
      geom/identity-transform
      track-pos)))
 
+(defn- rotate-free-obj [rail-transform [px py pz] [dx dy dz]]
+  [(+ px
+      (* dx (:x (get-x rail-transform)))
+      (* dy (:x (get-y rail-transform)))
+      (* dz (:x (get-z rail-transform))))
+   (+ py
+      (* dx (:y (get-x rail-transform)))
+      (* dy (:y (get-y rail-transform)))
+      (* dz (:y (get-z rail-transform))))
+   (+ pz
+      (* dx (:z (get-x rail-transform)))
+      (* dy (:z (get-y rail-transform)))
+      (* dz (:z (get-z rail-transform))))])
+
+
 (defn create-signal-objects
   [context block player-rail]
   (map
@@ -198,20 +213,6 @@
           {}
           (filter #(route/is-type % "wall") (:nodes-in-block block))))
 
-(defn- rotate-free-obj [rail-transform [px py pz] [dx dy dz]]
-  [(+ px
-      (* dx (:x (get-x rail-transform)))
-      (* dy (:x (get-y rail-transform)))
-      (* dz (:x (get-z rail-transform))))
-   (+ py
-      (* dx (:y (get-x rail-transform)))
-      (* dy (:y (get-y rail-transform)))
-      (* dz (:y (get-z rail-transform))))
-   (+ pz
-      (* dx (:z (get-x rail-transform)))
-      (* dy (:z (get-y rail-transform)))
-      (* dz (:z (get-z rail-transform))))])
-
 (defn annotate-block-with-freeobj-info [context block sym-tbl]
   (let [rails (:rails block)
         rails (into {} (map (fn [[k v]] [k (assoc v :freeobjs [])]) rails))]
@@ -292,21 +293,29 @@
 (defn load-signal-object [signal_name]
   (core/b3d-parse-file (java.io.File. (str "compatibility/signals/" signal_name ".csv"))))
 
-(defn create-signal-object [index [aspects names]]
-  {index (into {} (map (fn [aspect name] [aspect (load-signal-object name)]) aspects names))})
+(defn create-signal-object [[aspects names]]
+  (into {} (map (fn [aspect name] [aspect (load-signal-object name)]) aspects names)))
+
+(def signals-compat
+  (map
+   create-signal-object
+   [[[0 2] ["signal_2_0" "signal_2a_2"]]
+    [[0 4] ["signal_2_0" "signal_2b_4"]]
+    [[0 2 4] ["signal_3_0" "signal_3_2" "signal_3_4"]]
+    [[0 1 2 4] ["signal_4_0" "signal_4a_1" "signal_4a_2" "signal_4a_4"]]
+    [[0 2 3 4] ["signal_4_0" "signal_4b_2" "signal_4b_3" "signal_4b_4"]]
+    [[0 1 2 3 4] ["signal_5_0" "signal_5a_1" "signal_5_2" "signal_5_3" "signal_5_4"]]
+    [[0 2 3 4 5] ["signal_5_0" "signal_5_2" "signal_5_3" "signal_5_4" "signal_5b_5"]]
+    [[0 1 2 3 4 5] ["signal_6_0" "signal_6_1" "signal_6_2" "signal_5_3" "signal_6_4" "signal_6_5"]]
+    [[0 3 4] ["repeatingsignal_0" "repeatingsignal_3" "repeatingsignal_4"]]]))
 
 (def signals
-  (into {} (map-indexed
-    create-signal-object
-    [[[0 2] ["signal_2_0" "signal_2a_2"]]
-     [[0 4] ["signal_2_0" "signal_2b_4"]]
-     [[0 2 4] ["signal_3_0" "signal_3_2" "signal_3_4"]]
-     [[0 1 2 4] ["signal_4_0" "signal_4a_1" "signal_4a_2" "signal_4a_4"]]
-     [[0 2 3 4] ["signal_4_0" "signal_4b_2" "signal_4b_3" "signal_4b_4"]]
-     [[0 1 2 3 4] ["signal_5_0" "signal_5a_1" "signal_5_2" "signal_5_3" "signal_5_4"]]
-     [[0 2 3 4 5] ["signal_5_0" "signal_5_2" "signal_5_3" "signal_5_4" "signal_5b_5"]]
-     [[0 1 2 3 4 5] ["signal_6_0" "signal_6_1" "signal_6_2" "signal_5_3" "signal_6_4" "signal_6_5"]]
-     [[0 3 4] ["repeatingsignal_0" "repeatingsignal_3" "repeatingsignal_4"]]])))
+  (map
+   create-signal-object
+   [[[0 2 4] ["signal_3_0" "signal_3_2" "signal_3_4"]]
+    [[0 1 2 4] ["signal_4_0" "signal_4a_1" "signal_4a_2" "signal_4a_4"]]
+    [[0 1 2 3 4] ["signal_5_0" "signal_5a_1" "signal_5_2" "signal_5_3" "signal_5_4"]]
+    [[0 3 4] ["repeatingsignal_0" "repeatingsignal_3" "repeatingsignal_4"]]]))
 
 (defn annotate-block-with-signals
   [context block sym-tbl]
@@ -321,7 +330,7 @@
                        dz (- track-pos (:start-ref block))
                        ]
                    {:track-pos track-pos
-                    :prototypes (get signals (get signal-translate aspects))
+                    :prototypes (nth signals (- aspects 3))
                     :position [x y dz]
                     ;; These funky constants are from the OpenBVE source
                     :yaw (* 0.0174532925199433 yaw)

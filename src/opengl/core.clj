@@ -4,7 +4,7 @@
   (:gen-class))
 
 (defrecord Face [verts transp two-sided])
-(defrecord Mesh [verts faces color texture texture-coords])
+(defrecord Mesh [verts faces color texture blend texture-coords])
 
 (defn validate-mesh [ast-mesh]
   ; validate texture coord refs here
@@ -13,9 +13,10 @@
 (defn create-mesh [ast-mesh]
   (let [color (:color ast-mesh)
         texture (:texture ast-mesh)
+        blend-mode (or (:blend ast-mesh) {:mode nil :glow nil})
         colors (m/create-color-set color nil nil) ;;TODO support transparent and emissive color
         textures (m/create-texture-set texture nil 0.0) ;;TODO support blend and nightitme textures
-        material (m/create-material colors textures)
+        material (m/create-material colors textures blend-mode)
         tcoords (:texture-coords ast-mesh)
         verts (:verts ast-mesh)
         faces (:faces ast-mesh)
@@ -36,7 +37,8 @@
                       " Textures: " (:texture x) " (" (count (:texture-coords x)) "))")))
 
 (defn b3d-build-mesh [mesh]
-  (Mesh. (:verts mesh) (:faces mesh) (:color mesh) (:texture-path mesh) (:texture-coords mesh)))
+  (Mesh. (:verts mesh) (:faces mesh) (:color mesh)
+         (:texture-path mesh) (:blend mesh) (:texture-coords mesh)))
 
 (defn b3d-save-active-mesh [context]
   (let [mesh (:active context)
@@ -69,6 +71,14 @@
 
 (defn b3d-set-texture-path [context path]
   (b3d-assoc-active context :texture-path (str (:path context) java.io.File/separator  path)))
+
+(defn b3d-set-blend-mode [context parts]
+  (let [[mode glow-half glow-mode] parts]
+    (b3d-assoc-active context :blend
+                      {:mode (.toLowerCase mode)
+                       :glow (if (and glow-half glow-mode)
+                               {:mode (.toLowerCase glow-mode)
+                                :half (read-string glow-half)})})))
 
 ;; TODO- Explicitly reject nighttime textures for now
 (defn b3d-parse-load [line]
@@ -186,7 +196,7 @@
 
      ;; TODO: Implement
      (starts-with line "SetBlendMode")
-     context
+     (b3d-set-blend-mode context (rest (.split line ",")))
 
      :else (b3d-set-error context (str "Invalid line: " line " (line " linenum ")"))
      )))

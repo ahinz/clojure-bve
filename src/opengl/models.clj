@@ -43,10 +43,10 @@
     [bmp-file])
 
 (defrecord Material
-    [color-set texture-set])
+    [color-set texture-set blend-mode])
 
-(defn create-material [colors textures]
-  (Material. colors textures))
+(defn create-material [colors textures blend-mode]
+  (Material. colors textures blend-mode))
 
 (defn create-texture-set
   ([texture] (create-texture-set texture nil 0))
