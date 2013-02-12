@@ -11,7 +11,8 @@
    (javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2 TraceGL2 GLAutoDrawable)
    (javax.media.opengl.awt GLCanvas)
    (javax.media.opengl.glu.gl2 GLUgl2)
-   (com.jogamp.opengl.util FPSAnimator)]
+   (com.jogamp.opengl.util FPSAnimator)
+   (com.jogamp.opengl.util.gl2 GLUT)]
   (:gen-class))
 
 
@@ -234,6 +235,28 @@
                    ^Double ux ^Double uy ^Double uz]
   (.gluLookAt glu ex ey ez cx cy cz ux uy uz))
 
+(def last-time-stamps (ref (repeat 30 0)))
+
+(defn- display-fps [^GL2 gl]
+      (dosync
+       (ref-set
+        last-time-stamps
+        (concat (rest @last-time-stamps) [(System/nanoTime)])))
+
+      (let [glut (GLUT.)
+            fps (* 1e9
+                   (/ (count @last-time-stamps)
+                      (- (last @last-time-stamps) (first @last-time-stamps))))]
+        (.glPushMatrix gl)
+        (.glLoadIdentity gl)
+        (.glColor4f gl 0.0 0.0 1.0 1.0)
+        (.glWindowPos2i gl 40 40)
+        (.glutBitmapString
+         glut
+         GLUT/BITMAP_TIMES_ROMAN_24
+         (format "FPS %2.2f" fps))
+        (.glPopMatrix gl)))
+
 (defn create-event-proxy [w h]
   (proxy [GLEventListener] []
     (display [^GLAutoDrawable drawable]
@@ -245,7 +268,7 @@
 
         (.glClearColor gl (Float. 1.0) 1.0 1.0 1.0)
         (.glClear gl (bit-or GL/GL_COLOR_BUFFER_BIT GL/GL_DEPTH_BUFFER_BIT))
-        ;(.glClear gl GL/GL_COLOR_BUFFER_BIT)
+                                        ;(.glClear gl GL/GL_COLOR_BUFFER_BIT)
         ;; Clear texture cache
         ;; (dosync
         ;;  (ref-set textures {}))
@@ -262,11 +285,12 @@
           (doseq [mesh meshes-from-b3d]
             (gl-render-mesh gl mesh)))
 
-        (gl-draw-axis gl)))
+        (gl-draw-axis gl)
+        (display-fps gl)))
     (displayChanged [drawable modeChanged deviceChanged] (println "DC"))
     (init [^GLAutoDrawable drawable]
       (.setGL drawable (DebugGL2. (.getGL drawable)))
-      ;(.setGL drawable (TraceGL2. (.getGL drawable) System/out))
+                                        ;(.setGL drawable (TraceGL2. (.getGL drawable) System/out))
       (let [^GL2 gl (.getGL drawable)
             ^GLUgl2 glu (GLUgl2.)
             aspect (float (/ w h))]
@@ -285,12 +309,12 @@
         (.glEnable gl GL/GL_BLEND)
         (.glEnable gl GL/GL_DEPTH_TEST)
         (.glDepthFunc gl GL/GL_LEQUAL)
-        ;(.glDisable gl GL/GL_LIGHTING)
+                                        ;(.glDisable gl GL/GL_LIGHTING)
 
-        ;(.glCullFace gl GL/GL_BACK)
-        ;(.glEnable gl GL/GL_CULL_FACE)
+                                        ;(.glCullFace gl GL/GL_BACK)
+                                        ;(.glEnable gl GL/GL_CULL_FACE)
 
-        ;(gl-draw-axis gl)
+                                        ;(gl-draw-axis gl)
         ))
     (reshape [drawable x y width height] (println "RE"))))
 
@@ -319,7 +343,7 @@
   '())
 
 (def canvas (first (make-canvas)))
-(def anim (FPSAnimator. canvas 1))
+(def anim (FPSAnimator. canvas 10))
 (.start anim)
 
 (defn set-center [canvas x y z]
