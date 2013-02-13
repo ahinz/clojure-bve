@@ -1,5 +1,8 @@
 (ns opengl.route
-  [:require [opengl.core :as core]]
+  [:require
+   [opengl.core :as core]
+   [opengl.util :as util]
+   [opengl.b3d :as b3d]]
   (:gen-class))
 
 (set! *warn-on-reflection* true)
@@ -17,7 +20,7 @@
   (let [symbol-table (:symbol-table context)]
     (reduce (fn [context [k ^String v]]
               (try
-                (let [b3d (core/b3d-parse-file (java.io.File. v))]
+                (let [b3d (b3d/parse-file (java.io.File. v))]
                   (if (:error b3d)
                     (append-file-parse-error context (:error b3d))
                     (assoc context :symbol-table
@@ -127,7 +130,7 @@
    (= \; (first line))
    nil
 
-   (core/starts-with line "with")
+   (util/starts-with line "with")
    [(create-node :with line idx file { :scope (substr line 4)})]
 
    (prefixed-line line)

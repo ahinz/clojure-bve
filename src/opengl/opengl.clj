@@ -203,10 +203,6 @@
               (map textures-in-vertex face))))
     (gl-render-face gl face)))
 
-;(def q-mesh (core/b3d-parse-file (java.io.File. "Flushing/Speed30.b3d")))
-;(def q-mesh (core/b3d-parse-file (java.io.File. "Flushing/bldg17.b3d")))
-;(def q-mesh (core/b3d-parse-file (java.io.File. "Flushing/SheaStadium.b3d")))
-
 (defn gl-draw-axis [^GL2 gl]
   (doto gl
     (.glBegin GL/GL_LINES)
@@ -268,10 +264,6 @@
 
         (.glClearColor gl (Float. 1.0) 1.0 1.0 1.0)
         (.glClear gl (bit-or GL/GL_COLOR_BUFFER_BIT GL/GL_DEPTH_BUFFER_BIT))
-                                        ;(.glClear gl GL/GL_COLOR_BUFFER_BIT)
-        ;; Clear texture cache
-        ;; (dosync
-        ;;  (ref-set textures {}))
 
         (.glLoadIdentity gl)
         (.gluPerspective glu (Float. 25.0) 1.0 10.0 600.0)

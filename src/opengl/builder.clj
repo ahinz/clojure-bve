@@ -3,6 +3,7 @@
    [opengl.core :as core]
    [opengl.geom :as geom]
    [opengl.models :as m]
+   [opengl.b3d :as b3d]
    [opengl.route :as route]]
   (:gen-class))
 
@@ -293,7 +294,7 @@
    6 7})
 
 (defn load-signal-object [signal_name]
-  (core/b3d-parse-file (java.io.File. (str "compatibility/signals/" signal_name ".csv"))))
+  (b3d/parse-file (java.io.File. (str "compatibility/signals/" signal_name ".csv"))))
 
 (defn create-signal-object [[aspects names]]
   (into {} (map (fn [aspect name] [aspect (load-signal-object name)]) aspects names)))
