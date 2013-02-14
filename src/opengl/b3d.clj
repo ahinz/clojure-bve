@@ -53,7 +53,6 @@
     (:faces mesh) mesh)))
 
 (defn- save-active-mesh [context]
-  (println "Active" (count (:active context)))
   (let [mesh (:active context)]
     (if mesh
       (assoc context
@@ -243,9 +242,11 @@
      :else
      (add-error context :unknown-line))))
 
-(defn parse-string [^String s]
-  (push-mesh-builder
-   (reduce handle-line {} (map #(util/trim %) (util/split s "\n")))))
+(defn parse-string
+  ([^String s] (parse-string s {}))
+  ([^String s context]
+     (push-mesh-builder
+      (reduce handle-line context (map #(util/trim %) (util/split s "\n"))))))
 
-(defn parse-file [f]
-  (parse-string (slurp f)))
+(defn parse-file [^java.io.File f]
+  (parse-string (slurp f) {:path (.getParent f)}))

@@ -21,11 +21,11 @@
     (reduce (fn [context [k ^String v]]
               (try
                 (let [b3d (b3d/parse-file (java.io.File. v))]
-                  (if (:error b3d)
-                    (append-file-parse-error context (:error b3d))
+                  (if (:errors b3d)
+                    (append-file-parse-error context (:errors b3d))
                     (assoc context :symbol-table
                            (assoc (:symbol-table context)
-                             k b3d))))
+                             k (:meshes b3d)))))
                 (catch Exception e (append-file-parse-error context (format "Could not load %s" v)))))
             context
             (:symbol-table context))))
