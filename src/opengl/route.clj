@@ -7,6 +7,17 @@
 
 (set! *warn-on-reflection* true)
 
+(def errors
+  {:bad-line "Could not parse line"})
+
+(defn- add-error [context error-key]
+  (assoc
+      context :errors
+      (conj (or (:errors context) [])
+            {:linenum (:linenum context)
+             :line (:line context)
+             :error (get errors error-key)})))
+
 (defn- strip-comment [^String line]
   (let [idx (.indexOf line ";")]
     (if (> 0 idx)
@@ -35,19 +46,18 @@
     (assoc context :symbol-table
            (assoc symbol-table (str command index) file))))
 
-(defn trim-trailing-comma [^String s]
+(defn- trim-trailing-comma [^String s]
   (if (= \, (last s))
     (.substring s 0 (- (count s) 1))
     s))
 
-(defn trim-forward-slash [^String s]
+(defn- trim-forward-slash [^String s]
   (if (= (first s) \/)
     (.substring s 1)
     s))
 
 (defn- replace-all [^String base ^String pattern ^String repl]
   (.replaceAll base pattern repl))
-(defn- trim [^String a] (.trim a))
 (defn- equals-ignore-case [^String a ^String b] (.equalsIgnoreCase a b))
 
 (defn- load-structure [context]
@@ -59,7 +69,7 @@
                                (strip-comment
                                 (trim-forward-slash
                                  (trim-trailing-comma
-                                  (trim (replace-all (:body node) "\\\\" "/")))))))
+                                  (util/trim (replace-all (:body node) "\\\\" "/")))))))
    context
    (filter
     #(equals-ignore-case (:prefix %) "structure")
@@ -68,29 +78,21 @@
 (defn- convert-node-to-error [node descr]
   (assoc node :type :parse-error :description descr))
 
-(defn- create-node [type line idx file stuff]
+(defn- create-node [context type body]
   (merge
    {:type type
-    :fileinfo { :line line :file file :line-num (+ 1 idx) }}
-   stuff))
+    :line (:line context)
+    :file (:file context)
+    :linenum (:linenum context)}
+   body))
 
-(defn- create-error [line idx file descr]
-  (create-node :parse-error line idx file { :description descr}))
+(defn- create-node-in-context [context type body]
+  (assoc context :nodes
+         (conj (or (:nodes context) [])
+               (create-node context type body))))
 
 (defn is-type [node type]
   (= (:type node) type))
-
-(defn create-track-ref-node [num line idx file]
-  (create-node :track-ref line idx file { :ref num }))
-
-(defn- print-node [node]
-  (if (= :parse-error (:type node))
-    (printf "Parse Error:%s:%s: %s\n  %s\n"
-            (:file (:fileinfo node))
-            (:line-num (:fileinfo node))
-            (:description node)
-            (:line (:fileinfo node)))
-    (println "AST(" (:type node) (assoc node :fileinfo nil) ")")))
 
 (defn- substr [^String str e]
   (.trim (.substring str e)))
@@ -98,7 +100,7 @@
 (defn- parse-simple-prefix [line]
   (second (re-matches #".+?\s(.*)$" line)))
 
-(def prefix-re #"([a-zA-Z]+)?(\.([a-zA-Z]+)(\(([0-9]+)\))?)(\.[a-zA-Z.]+)?(.*)$")
+(def prefix-re #"([a-zA-Z]+)?(\.([a-zA-Z]+)(\(([0-9]+)\))?)(\.([a-zA-Z.]+))?(.*)$")
 
 (defn- prefixed-line [line]
   (re-matches prefix-re line))
@@ -114,92 +116,89 @@
    "dikeend" "turn" "roofr" "roofl" "roofcr" "forml" "formr" "formcr" "formcl"
    "crackl" "crackr"])
 
-(defn- create-node-from-prefix [line line-num file]
-  (let [[_ pfx _ ^String cmd _ arg sfx rest] (prefixed-line line)
-        cmd (.trim (.toLowerCase cmd))]
+(defn- create-node-from-prefix [context line]
+  (let [[_ pfx _ ^String cmd _ arg _ sfx rest] (prefixed-line line)
+        cmd (util/trim (.toLowerCase cmd))]
     (if (some #{cmd} allowed-commands)
-      (create-node cmd line line-num file { :prefix pfx :body rest :arg arg :suffix sfx})
-      (create-error line line-num file (str "Unknown Command: " cmd)))
-    ))
+      (create-node-in-context
+       context cmd
+       {:prefix pfx
+        :body (trim-trailing-comma
+               (util/trim rest))
+        :arg arg
+        :suffix sfx})
+      (add-error context :bad-line))))
 
-(defn- parse-route-line [idx ^String line file]
+(defn- parse-route-line [context ^String line]
   (cond
-   (= (count (.trim line)) 0)
-   nil
+   (= (count (util/trim line)) 0)
+   context
 
    (= \; (first line))
-   nil
+   context
 
    (util/starts-with line "with")
-   [(create-node :with line idx file { :scope (substr line 4)})]
+   (create-node-in-context context :with {:body (util/lower-case (substr line 4))})
 
    (prefixed-line line)
-   [(create-node-from-prefix line idx file)]
+   (create-node-from-prefix context line)
 
    (num-prefixed-line line)
    (let [[_ num ^String subcommands] (num-prefixed-line line)
-         subcommands (.split subcommands ",")]
-     (into [(create-track-ref-node num line idx file)]
-           (map #(parse-route-line idx % file) subcommands)))
+         subcommands (.split subcommands ",")
+         context (create-node-in-context context :track-ref {:body num})]
+     (reduce parse-route-line context subcommands))
 
    :else
-   (create-error line idx file "Could not parse line")))
+   (add-error context :bad-line)))
 
-(defn- update-prefix-if-needed [token last-with]
-  (if (and last-with (not (:prefix token)))
-    (assoc token :prefix last-with)
-    token))
+(defn- parse-string
+  ([s] (parse-string s {}))
+  ([s context]
+     (reduce (fn [context line]
+                         (parse-route-line
+                          (assoc context
+                            :line line
+                            :linenum (+ 1 (or (:linenum context) 0)))
+                          line))
+                       context
+                       (map #(util/trim %) (util/split s "\n")))))
 
-(defn- update-track-ref-if-needed [token track-ref]
-  (if track-ref
-    (assoc token :track-ref track-ref)
-    token))
+(defn- reduce-nodes [context f]
+  (let [nodes (:nodes context)
+        context (assoc context :nodes [])]
+    (reduce f context nodes)))
 
+(defn- append-node-with-track-ref [context node track-ref]
+  (assoc context
+    :nodes
+    (conj (or (:nodes context) [])
+          (assoc node :track-ref track-ref))))
 
-(defn- validate-commands-have-prefixes [context]
-  (assoc context :nodes
-         (map (fn [node]
-                (if (:prefix node)
-                  node
-                  (convert-node-to-error node (str "Command must have prefix (given " (:type node) ")"))))
-              (:nodes context))))
+(defn- append-node-with-prefix [context node prefix]
+  (let [prefix (or (:prefix node) prefix)
+        node (assoc node :prefix prefix)
+        nodes (or (:nodes context) [])]
+    (assoc context :nodes (conj nodes node))))
 
-(def track-nodes-not-required-to-have-refs ["height"])
+(defn- associate-track-refs [context]
+  (reduce-nodes
+   context
+   (fn [context node]
+     (if (is-type node :track-ref)
+       (assoc context :track-ref (read-string (:body node)))
+       (append-node-with-track-ref context node (:track-ref context))))))
 
-(defn- validate-track-commands-have-refs [context]
-  (assoc context :nodes
-         (let [nodes (:nodes context)]
-           (map (fn [node]
-                  (if (and (equals-ignore-case (:prefix node) "track")
-                           (nil? (:track-ref node))
-                           (not (some #{(:type node)} track-nodes-not-required-to-have-refs)))
-                    (convert-node-to-error node (str "Track command must have a reference"))
-                    node))
-                nodes))))
-
-(defn- update-prefixes [context]
-  (let [nodes (:nodes context)]
-    (assoc context :nodes
-           (last
-            (reduce (fn [[last-with nodes] node]
-                      (if (is-type node :with)
-                        [(:scope node) nodes]
-                        [last-with (conj nodes (update-prefix-if-needed node last-with))]))
-                    [nil []]
-                    nodes)))))
-
-(defn- update-track-refs [context]
-  (let [nodes (:nodes context)]
-    (assoc context :nodes
-           (last
-            (reduce (fn [[last-ref nodes] node]
-                      (if (is-type node :track-ref)
-                        [(:ref node) nodes]
-                        [last-ref (conj nodes (update-track-ref-if-needed node last-ref))]))
-                    [nil []]
-                    nodes)))))
+(defn- associate-with-blocks [context]
+  (reduce-nodes
+   context
+   (fn [context node]
+     (if (is-type node :with)
+       (assoc context :with (:body node))
+       (append-node-with-prefix context node (:with context))))))
 
 (defn- split [^String s ^String p] (.split s p))
+
 (defn parse-route-file [^String file-path]
   (let [nodes (filter
                (comp not nil?)
@@ -209,18 +208,5 @@
                              (split (slurp file-path) "\n"))))
         context {:nodes nodes :symbol-table {} :errors []}]
     (-> context
-        update-prefixes
-        update-track-refs
-        validate-commands-have-prefixes
-        validate-track-commands-have-refs
         load-structure
         )))
-
-
-(defn print-errors [tokens]
-  (doseq [t tokens]
-    (if (= :parse-error (:type t)) (print-node t))))
-
-(defn print-all [tokens]
-  (doseq [t tokens]
-    (print-node t)))

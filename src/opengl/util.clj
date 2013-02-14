@@ -1,6 +1,13 @@
 (ns opengl.util
   (:gen-class))
 
+(defn strip-comment [^String str]
+  (let [idx (.lastIndexOf str ";")]
+    (.trim
+     (if (> idx 0)
+       (.substring str 0 idx)
+       str))))
+
 (defn strip-non-ascii [^String string]
   (.replaceAll string "[^\\x00-\\x7F]" ""))
 

@@ -162,18 +162,11 @@
         mesh-with-color (assoc mesh :color color)]
     (assoc context :active mesh-with-color)))
 
-(defn- strip-comment [^String str]
-  (let [idx (.lastIndexOf str ";")]
-    (.trim
-     (if (> idx 0)
-       (.substring str 0 idx)
-       str))))
-
 (defn- handle-line [context ^String line]
   (let [context (assoc context
                   :line line
                   :linenum (+ 1 (or (:linenum context) 0)))
-        line (strip-comment line)]
+        line (util/strip-comment line)]
     (cond
      (or
       (= 0 (count line))
