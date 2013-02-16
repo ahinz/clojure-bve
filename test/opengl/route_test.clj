@@ -280,3 +280,44 @@
          :suffix nil
          :body "-800;0"
          :file nil}]))))
+
+(deftest parse-route-section
+  (testing "route data is captured"
+    (let [context
+          (#'opengl.route/associate-track-refs
+           (#'opengl.route/associate-with-blocks
+             (#'opengl.route/parse-string
+              (u/text
+               "With Route"
+               ".Comment New York City Transit Authority IRT 7 Line"
+               ".Timetable Times Square Manhattan to Main Street Flushing Queens"
+               ""
+               ".DeveloperID 090957"
+               ""))))
+          parsed (#'opengl.route/parse-nodes-in-context context)]
+      (is
+       (=
+        (:route parsed)
+        {:comment "New York City Transit Authority IRT 7 Line"
+         :timetable "Times Square Manhattan to Main Street Flushing Queens"
+         :developerid "090957"}
+        )))))
+
+(deftest parse-structure-section
+    (let [context
+          (#'opengl.route/associate-track-refs
+           (#'opengl.route/associate-with-blocks
+             (#'opengl.route/parse-string
+              (u/text
+               ""
+               "with structure"
+               ""
+               ".rail(7).suffix Flushing\\oSlab.b3d;Half Tie type,"
+               ".walll(1) Flushing\\TunnelL.b3d;Tunnel Wall and Ceiling (Left),"
+               ""))))
+          context (#'opengl.route/parse-nodes-in-context context)]
+  (testing "structure elements are saved to symbol table"
+    (is
+     (= (symbol-from-context context "rail" 7) "Flushing/oSlab.b3d"))
+    (is
+     (= (symbol-from-context context "walll" 1) "Flushing/TunnelL.b3d")))))

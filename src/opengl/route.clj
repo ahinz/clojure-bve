@@ -8,7 +8,11 @@
 (set! *warn-on-reflection* true)
 
 (def errors
-  {:bad-line "Could not parse line"})
+  {:bad-line "Could not parse line"
+   :bad-structure-command "Invalid command in structure"
+   :option-not-yet-supported "This option is not yet supported"
+   :route-not-yet-supported "This route option is not yet supported"
+   :command-not-found "Invalid command"})
 
 (defn- add-error [context error-key]
   (assoc
@@ -16,6 +20,24 @@
       (conj (or (:errors context) [])
             {:linenum (:linenum context)
              :line (:line context)
+             :error (get errors error-key)})))
+
+(defn- add-node-error [context node error-key]
+  (assoc
+      context :errors
+      (conj (or (:erors context) [])
+            {:linenum (:linenum node)
+             :line (:line node)
+             :file (:path context)
+             :error (get errors error-key)})))
+
+(defn- add-node-warning [context node error-key]
+  (assoc
+      context :errors
+      (conj (or (:erors context) [])
+            {:linenum (:linenum node)
+             :line (:line node)
+             :file (:path context)
              :error (get errors error-key)})))
 
 (defn- strip-comment [^String line]
@@ -58,6 +80,7 @@
 
 (defn- replace-all [^String base ^String pattern ^String repl]
   (.replaceAll base pattern repl))
+
 (defn- equals-ignore-case [^String a ^String b] (.equalsIgnoreCase a b))
 
 (defn- load-structure [context]
@@ -129,6 +152,9 @@
         :suffix sfx})
       (add-error context :bad-line))))
 
+(defn symbol-from-context [context type idx]
+  (get (:symbol-table context) (str type idx)))
+
 (defn- parse-route-line [context ^String line]
   (cond
    (= (count (util/trim line)) 0)
@@ -196,6 +222,76 @@
      (if (is-type node :with)
        (assoc context :with (:body node))
        (append-node-with-prefix context node (:with context))))))
+
+(def supported-structures
+  ["ground" "rail" "walll" "wallr" "dikel" "diker"
+   "forml" "formr" "formcl" "formcr"
+   "roofl" "roofr" "roofcl" "roofcr"
+   "crackl" "crackr" "freeobj" "beacon"])
+
+(defn parse-structure-node [context node]
+  (if (some #{(:type node)} supported-structures)
+    (assoc-in context [:symbol-table (str (:type node) (:arg node))]
+              (strip-comment
+               (util/replace-windows-path-chars
+                (:body node))))
+    (add-error context :bad-structure-command)))
+
+(defn- parse-route-node [context node]
+  (cond
+   (is-type node "comment")
+   (assoc-in context [:route :comment] (:body node))
+   (is-type node "timetable")
+   (assoc-in context [:route :timetable] (:body node))
+   (is-type node "developerid")
+   (assoc-in context [:route :developerid] (:body node))
+
+   :else
+   (add-node-warning context node :route-not-yet-supported)))
+
+(defn- parse-node [context node]
+  (cond
+   (= (:prefix node) "options")
+   (add-node-warning context node :option-not-yet-supported)
+
+   (= (:prefix node) "route")
+   (parse-route-node context node)
+
+   (= (:prefix node) "structure")
+   (parse-structure-node context node)
+
+   (= (:prefix node) "track")
+   (let [track-ref (or (:track-ref node) 0.0)
+         block (- track-ref (mod track-ref (:block-size context)))]
+     (update-in context [:blocks block :nodes]
+                (fn [nodes]
+                  (conj (or nodes []) node))))
+   :else
+   (add-node-error context node :command-not-found)))
+
+(defn- parse-nodes-in-context [context]
+  (reduce parse-node context (:nodes context)))
+
+(defn- create-base-block [starting-position block-size]
+  {:start-ref starting-position
+   :end-ref (+ starting-position block-size)})
+
+(defn- nodes-in-block [context block]
+  (let [start (:start-ref block)
+        end (:end-ref block)]
+    (filter #(or (>= (:track-ref block) start)
+                 (< (:track-ref block) end)) (:nodes context))))
+
+(defn- create-blocks [context]
+  (let [refs (filter identity (map #(:track-ref %) (:nodes context)))
+        max-ref (apply max refs)
+        block-size 25]
+    (map #(assoc % :nodes (nodes-in-block %))
+         (map #(create-base-block % block-size)
+              (range 0 (+ block-size max-ref) block-size)))))
+
+(defn- create-blocks-in-context [context]
+  (assoc context :blocks (create-blocks context)))
 
 (defn- split [^String s ^String p] (.split s p))
 
