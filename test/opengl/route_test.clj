@@ -254,14 +254,14 @@
              :file nil}]})))
 
       [{:type "rail"
-         :line ""
-         :linenum 1
-         :track-ref 125
-         :prefix "thing"
-         :arg nil
-         :suffix nil
-         :body "1;-9.500000;0.000000;8"
-         :file nil}
+        :line ""
+        :linenum 1
+        :track-ref 125
+        :prefix "thing"
+        :arg nil
+        :suffix nil
+        :body "1;-9.500000;0.000000;8"
+        :file nil}
         {:type "freeobj"
          :line ""
          :linenum 1
@@ -321,3 +321,82 @@
      (= (symbol-from-context context "rail" 7) "Flushing/oSlab.b3d"))
     (is
      (= (symbol-from-context context "walll" 1) "Flushing/TunnelL.b3d")))))
+
+
+(deftest parse-blocks
+    (let [context
+          (#'opengl.route/parse-nodes-in-blocks-in-context
+           (#'opengl.route/parse-nodes-in-context
+            (#'opengl.route/create-blocks-in-context
+             (#'opengl.route/associate-track-refs
+              (#'opengl.route/associate-with-blocks
+                (#'opengl.route/parse-string
+                 (u/text
+                  ""
+                  "with structure"
+                  ""
+                  ".rail(7).suffix Flushing\\oSlab.b3d;Half Tie type,"
+                  ".rail(8) Rail8.b3d"
+                  ".rail(9) Rail9.b3d"
+                  ".walll(1) Flushing\\TunnelL.b3d;Tunnel Wall and Ceiling (Left),"
+                  ".walll(5) Walll5.b3d"
+                  ".wallr(5) Wallr5.b3d"
+                  ".freeobj(1) Whatever.b3d"
+                  ".freeobj(10) Whatever10.b3d"
+                  ".freeobj(101) Whatever101.b3d"
+                  ""
+                  " with track"
+                  " .height 0.3,"
+                  " 0,.back 1,.height 0.3,.pitch 0,.ground 1,.railstart 1;-12.000000;0.000000;8,.railtype 1;8,.railtype 0;9,"
+                  " 0,.sta Times Square;4.3230;4.3300;0;1;0;;;20;45;Flushing\\Square.wav,"
+                  " 25,.form 0;1;0;0,"
+                  " 50,.form 0;1;0;0,"
+                  " 75,.form 0;1;1;0,.wall 0;1;5,.wall 1;-1;5,.stop 0,"
+                  ;; " 80,.freeobj 0;101;1.5;3.5;0,.freeobj 0;10;-3.8;1.1;0,.freeobj 0;1;-3;0;0,.freeobj 0;1;-8;0;0,"
+
+                  "")))))))]
+      (testing "No errors"
+        (is (= (:errors context) '())))
+
+      (testing "correctly annotate blocks"
+        (is
+         (= (:blocks context)
+            [{:start-ref 0 :end-ref 25
+              :height 0.3 :pitch 0 :ground 1
+              :rails {0 {:start [0.0 0.0]
+                         :end   [0.0 0.0]
+                         :prototype "Rail9.b3d"}
+                      1 {:start [-12.0 0.0]
+                         :end   [-12.0 0.0]
+                         :prototype "Rail8.b3d"}}}
+             {:start-ref 25 :end-ref 50
+              :rails {0 {:start [0.0 0.0]
+                         :end   [0.0 0.0]
+                         :prototype "Rail9.b3d"}
+                      1 {:start [-12.0 0.0]
+                         :end   [-12.0 0.0]
+                         :prototype "Rail8.b3d"}}
+              :form {:rail1 0 :rail2 1
+                     :form-idx 0 :roof-idx 0}}
+             {:start-ref 50 :end-ref 75
+              :rails {0 {:start [0.0 0.0]
+                         :end   [0.0 0.0]
+                         :prototype "Rail9.b3d"}
+                      1 {:start [-12.0 0.0]
+                         :end   [-12.0 0.0]
+                         :prototype "Rail8.b3d"}}
+              :form {:rail1 0 :rail2 1
+                     :form-idx 0 :roof-idx 0}}
+             {:start-ref 75 :end-ref 100
+              :rails {0 {:start [0.0 0.0]
+                         :end   [0.0 0.0]
+                         :prototype "Rail9.b3d"
+                         :walls ["Wallr5.b3d"]}
+                      1 {:start [-12.0 0.0]
+                         :end   [-12.0 0.0]
+                         :prototype "Rail8.b3d"
+                         :walls ["Walll5.b3d"]}}
+              :form {:rail1 0 :rail2 1
+                     :form-idx 0 :roof-idx 1}}
+
+])))))

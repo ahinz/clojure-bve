@@ -8,28 +8,35 @@
 (set! *warn-on-reflection* true)
 
 (def errors
-  {:bad-line "Could not parse line"
+  {:unknown-command "Could not parse command %s"
+   :bad-line "Could not parse line"
    :bad-structure-command "Invalid command in structure"
    :option-not-yet-supported "This option is not yet supported"
    :route-not-yet-supported "This route option is not yet supported"
-   :command-not-found "Invalid command"})
+   :track-ref-req "Track references are required in the track section"
+   :command-not-found "Invalid command"
+   :symbol-not-found "Could not find index %s in %s"
+   :rail-already-started "Rail %d already exists"
+   :rail-not-found "Rail %d does not exist"
+   :bad-track-command "Unknown track command"})
 
-(defn- add-error [context error-key]
+(defn- add-error [context error-key & rest]
   (assoc
       context :errors
       (conj (or (:errors context) [])
             {:linenum (:linenum context)
              :line (:line context)
-             :error (get errors error-key)})))
+             :error (apply format (concat [(get errors error-key)] rest))})))
 
-(defn- add-node-error [context node error-key]
+(defn- add-node-error [context node error-key & rest]
   (assoc
       context :errors
       (conj (or (:erors context) [])
             {:linenum (:linenum node)
              :line (:line node)
              :file (:path context)
-             :error (get errors error-key)})))
+             :type (:type node)
+             :error (apply format (concat [(get errors error-key)] rest))})))
 
 (defn- add-node-warning [context node error-key]
   (assoc
@@ -46,28 +53,6 @@
       line
       (.substring line 0 idx))))
 
-(defn- append-file-parse-error [context str]
-  (assoc context :errors (conj (context :errors) str)))
-
-(defn resolve-symbol-table [context]
-  (let [symbol-table (:symbol-table context)]
-    (reduce (fn [context [k ^String v]]
-              (try
-                (let [b3d (b3d/parse-file (java.io.File. v))]
-                  (if (:errors b3d)
-                    (append-file-parse-error context (:errors b3d))
-                    (assoc context :symbol-table
-                           (assoc (:symbol-table context)
-                             k (:meshes b3d)))))
-                (catch Exception e (append-file-parse-error context (format "Could not load %s" v)))))
-            context
-            (:symbol-table context))))
-
-(defn- insert-into-symbol-table [context command index file]
-  (let [symbol-table (:symbol-table context)]
-    (assoc context :symbol-table
-           (assoc symbol-table (str command index) file))))
-
 (defn- trim-trailing-comma [^String s]
   (if (= \, (last s))
     (.substring s 0 (- (count s) 1))
@@ -82,24 +67,6 @@
   (.replaceAll base pattern repl))
 
 (defn- equals-ignore-case [^String a ^String b] (.equalsIgnoreCase a b))
-
-(defn- load-structure [context]
-  (reduce
-   (fn [context node]
-     (insert-into-symbol-table context
-                               (:type node)
-                               (:arg node)
-                               (strip-comment
-                                (trim-forward-slash
-                                 (trim-trailing-comma
-                                  (util/trim (replace-all (:body node) "\\\\" "/")))))))
-   context
-   (filter
-    #(equals-ignore-case (:prefix %) "structure")
-    (:nodes context))))
-
-(defn- convert-node-to-error [node descr]
-  (assoc node :type :parse-error :description descr))
 
 (defn- create-node [context type body]
   (merge
@@ -150,7 +117,7 @@
                (util/trim rest))
         :arg arg
         :suffix sfx})
-      (add-error context :bad-line))))
+      (add-error context :unknown-command cmd))))
 
 (defn symbol-from-context [context type idx]
   (get (:symbol-table context) (str type idx)))
@@ -179,16 +146,16 @@
    (add-error context :bad-line)))
 
 (defn- parse-string
-  ([s] (parse-string s {}))
+  ([s] (parse-string s {:block-size 25.0}))
   ([s context]
      (reduce (fn [context line]
-                         (parse-route-line
-                          (assoc context
-                            :line line
-                            :linenum (+ 1 (or (:linenum context) 0)))
-                          line))
-                       context
-                       (map #(util/trim %) (util/split s "\n")))))
+               (parse-route-line
+                (assoc context
+                  :line line
+                  :linenum (+ 1 (or (:linenum context) 0)))
+                line))
+             context
+             (map #(util/trim %) (util/split s "\n")))))
 
 (defn- reduce-nodes [context f]
   (let [nodes (:nodes context)
@@ -249,6 +216,16 @@
    :else
    (add-node-warning context node :route-not-yet-supported)))
 
+(defn- update-block [context block f]
+  (assoc context :blocks (nth (:blocks context))))
+
+(defn- parse-track-node [context node]
+  (let [track-ref (or (:track-ref node) 0.0)
+        block (int (/ track-ref (:block-size context)))]
+    (update-in context [:blocks block :nodes]
+               (fn [nodes]
+                 (conj (or nodes []) node)))))
+
 (defn- parse-node [context node]
   (cond
    (= (:prefix node) "options")
@@ -261,48 +238,228 @@
    (parse-structure-node context node)
 
    (= (:prefix node) "track")
-   (let [track-ref (or (:track-ref node) 0.0)
-         block (- track-ref (mod track-ref (:block-size context)))]
-     (update-in context [:blocks block :nodes]
-                (fn [nodes]
-                  (conj (or nodes []) node))))
+   (parse-track-node context node)
+
    :else
    (add-node-error context node :command-not-found)))
 
 (defn- parse-nodes-in-context [context]
   (reduce parse-node context (:nodes context)))
 
+(defn- read-string-if-not-empty [^String s]
+  (if (= (count (.trim s)) 0) nil
+      (read-string s)))
+
+(defn- split-body [node]
+  (if (nil? node)
+    []
+    (map read-string-if-not-empty
+         (.split
+          (.trim ^String (trim-trailing-comma (:body node))) ";"))))
+
+(defn begin-repeat [context node block railidx structidx dir key sym]
+  (let [left-texture (symbol-from-context context (str key "l") structidx)
+        right-texture (symbol-from-context context (str key "r") structidx)]
+    (if (get (:rails block) railidx)
+      (cond
+       (and (or (= dir 0) (= dir -1)) (nil? left-texture))
+       (add-node-error block node :symbol-not-found structidx (str key "l"))
+
+       (and (or (= dir 0) (= dir  1)) (nil? right-texture))
+       (add-node-error block node :symbol-not-found structidx (str key "r"))
+
+       (= dir 1)
+       (assoc-in block [:rails railidx sym] [right-texture])
+
+       (= dir -1)
+       (assoc-in block [:rails railidx sym] [left-texture])
+
+       :else
+       (assoc-in block [:rails railidx sym] [right-texture]))
+      (add-node-error block node :rail-not-found railidx))))
+
+(defn- copy-rails [old-block new-block]
+  (assoc
+      new-block :rails
+      (if (:rails old-block)
+        (into {}
+              (map (fn [[railidx rail]]
+                     [railidx
+                      (assoc rail
+                        :start (:end rail)
+                        :end (:end rail))])
+                   (filter #(nil? (:rail-ends %)) (:rails old-block))))
+        {0 {:start [0.0 0.0] :end [0.0 0.0]}})))
+
+(defn- parse-nodes-in-block [context block prev-block]
+  (reduce
+   (fn [block node]
+     (cond
+      (is-type node "railstart")
+      (let [[railidx x y railtyp] (split-body node)
+            texture (symbol-from-context context "rail" railtyp)]
+        (if texture
+          (if (get (:rails block) railidx)
+            (add-node-error block node :rail-already-started railidx)
+            (assoc-in block [:rails railidx]
+                      {:start [(float x) (float y)]
+                       :end   [(float x) (float y)]
+                       :prototype texture }))
+          (add-node-error block node :symbol-not-found railidx type)))
+
+      (is-type node "rail")
+      (let [[railidx x y railtyp] (split-body node)
+            texture (symbol-from-context context "rail" railtyp)]
+        (if texture
+          (assoc-in block [:rails railidx]
+                    {:start [(float x) (float y)]
+                     :prototype texture })
+          (add-node-error block node :symbol-not-found railtyp "rail")))
+
+      (is-type node "railend")
+      (let [[railidx x y] (split-body node)]
+        (if-let [rail (get (:rails block) railidx)]
+          (update-in
+           block [:rails railidx]
+           (fn [rail]
+             (merge rail
+                    {:end (if (and x y) [(float x) (float y)] (:start rail))
+                     :rail-ends true})))
+          (add-node-error block node :rail-not-found railidx)))
+
+      (is-type node "railtype")
+      (let [[railidx railtype] (split-body node)]
+        (if-let [rail (get (:rails block) railidx)]
+          (if-let [texture (symbol-from-context context "rail" railtype)]
+            (assoc-in block [:rails railidx :prototype] texture)
+            (add-node-error block node :symbol-not-found railidx "rail"))
+          (add-node-error block node :rail-not-found railidx)))
+
+      (is-type node "accuracy")
+      (assoc block :accuracy (read-string (:body node)))
+
+      (is-type node "adhesion")
+      (assoc block :accuracy (read-string (:body node)))
+
+      ;; Geometry
+      (is-type node "pitch")
+      (assoc block :pitch (read-string (:body node)))
+
+      (is-type node "curve")
+      (let [[radius cant] (split-body node)
+            cant (or cant 0.0)]
+        (assoc block :curve {:radius radius :cant cant}))
+
+      (is-type node "turn")
+      (assoc block :turn (read-string (:body node)))
+
+      (is-type node "height")
+      (assoc block :height (read-string (:body node)))
+
+      (is-type node "sta")
+      block ;; Ignored
+
+      (is-type node "back")
+      block ;; Ignored
+
+      (is-type node "stop")
+      block ;; Ignored
+
+      (is-type node "form")
+      (let [[r1 r2 roof-idx form-idx] (split-body node)]
+        (if (get (:rails block) r1)
+          (if (get (:rails block) r2)
+            (assoc block :form {:rail1 r1 :rail2 r2
+                                :roof-idx roof-idx :form-idx form-idx})
+            (add-node-error block node :rail-not-found r2))
+          (add-node-error block node :rail-not-found r1)))
+
+      (is-type node "freeobj")
+      (let [[railidx freeobj x y yaw pitch roll] (split-body node)
+            x (or x 0.0)
+            y (or y 0.0)
+            yaw (or yaw 0.0)
+            pitch (or pitch 0.0)
+            roll (or roll 0.0)]
+        (if-let [rail (get (:rails block) railidx)]
+          (if-let [texture (symbol-from-context context "freeobj" freeobj)]
+            (update-in block [:rails railidx :freeobjs]
+                       (fn [freeobjs]
+                         (conj (or freeobjs [])
+                               {:x x :y y
+                                :yaw yaw :pitch pitch :roll roll
+                                :prototype texture})))
+            (add-node-error block node :symbol-not-found freeobj "freeobj"))
+          (add-node-error block node :rail-not-found railidx)))
+
+      (is-type node "wall")
+      (let [[railidx dir wallidx] (split-body node)]
+        (begin-repeat context node block railidx wallidx dir "wall" :walls))
+
+      (is-type node "wallend")
+      (let [railidx (read-string (:body node))]
+        (if (get (:rails block) railidx)
+          (assoc-in block [:rails railidx :wall-end] true)
+          (add-node-error block node :rail-not-found railidx)))
+
+      (is-type node "dike")
+      (let [[railidx dir wallidx] (split-body node)]
+        (begin-repeat context node block railidx wallidx dir "dike" :dikes))
+
+      (is-type node "dikeend")
+      (let [railidx (read-string (:body node))]
+        (if (get (:rails block) railidx)
+          (assoc-in block [:rails railidx :dike-end] true)
+          (add-node-error block node :rail-not-found railidx)))
+
+      (is-type node "ground")
+      (assoc block :ground (read-string (:body node)))
+
+      :else
+      (add-node-error block node :bad-track-command)))
+   (copy-rails prev-block (dissoc block :nodes))
+   (:nodes block)))
+
+(defn- parse-nodes-in-blocks-in-context [context]
+  (reduce (fn [context block]
+            (let [block (parse-nodes-in-block
+                         context block (last (:blocks context)))
+                  context (assoc context :errors
+                                 (concat (or (:errors context) []) (:errors block)))
+                  block (dissoc block :errors)]
+              (assoc context :blocks
+                     (conj (or (:blocks context) []) block))))
+          (assoc context :blocks [])
+          (:blocks context)))
+
 (defn- create-base-block [starting-position block-size]
   {:start-ref starting-position
-   :end-ref (+ starting-position block-size)})
-
-(defn- nodes-in-block [context block]
-  (let [start (:start-ref block)
-        end (:end-ref block)]
-    (filter #(or (>= (:track-ref block) start)
-                 (< (:track-ref block) end)) (:nodes context))))
+   :end-ref (+ starting-position block-size)
+   :nodes []
+   :rails {0 {}}})
 
 (defn- create-blocks [context]
   (let [refs (filter identity (map #(:track-ref %) (:nodes context)))
         max-ref (apply max refs)
         block-size 25]
-    (map #(assoc % :nodes (nodes-in-block %))
-         (map #(create-base-block % block-size)
-              (range 0 (+ block-size max-ref) block-size)))))
+    (map #(create-base-block % block-size)
+         (range 0 (+ block-size max-ref) block-size))))
 
 (defn- create-blocks-in-context [context]
-  (assoc context :blocks (create-blocks context)))
+  (assoc context :blocks (into [] (create-blocks context))))
 
 (defn- split [^String s ^String p] (.split s p))
 
+(defn parse-route-string [str file]
+  (parse-nodes-in-blocks-in-context
+   (parse-nodes-in-context
+    (create-blocks-in-context
+     (associate-track-refs
+      (associate-with-blocks
+        (parse-string
+         str
+         {:block-size 25.0 :file file}
+         )))))))
+
 (defn parse-route-file [^String file-path]
-  (let [nodes (filter
-               (comp not nil?)
-               (flatten
-                (map-indexed (fn [idx itm]
-                               (parse-route-line idx itm file-path))
-                             (split (slurp file-path) "\n"))))
-        context {:nodes nodes :symbol-table {} :errors []}]
-    (-> context
-        load-structure
-        )))
+  (parse-route-string (slurp file-path) file-path))

@@ -83,3 +83,20 @@
        [(v3f sx sy sz)
         (v3f ux uy uz)
         (v3f dx dy dz)])))
+
+(defn vector-add [v1 v2]
+  (map + v1 v2))
+
+(defn vector-sub [v1 v2]
+  (map - v1 v2))
+
+(defn vector-normalize [v1]
+  (let [t ^Double (Math/sqrt (apply + (map #(* % %) v1)))]
+    (if (= t 0.0)
+      v1
+      (map #(/ % t) v1))))
+
+(defn vector-cross [[ax ay az] [bx by bz]]
+  [(- (* ay bz) (* az by))
+   (- (* az bx) (* ax bz))
+   (- (* ax by) (* ay bx))])
