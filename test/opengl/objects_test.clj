@@ -38,8 +38,9 @@
                ""
                "with track"
                "0,.railstart 1;-12.0;0.0;8,.railtype 0;9"
-               "25,.rail 1;0.0;0.0;8"
-               ) nil))))
+               "25,.rail 1;0.0;0.0;8")
+              nil
+              {:debug-symbols true}))))
       [{:track-transform geom/identity-transform
         :position [0.0 0.0 0.0]
         :direction [0.0 1.0]
@@ -55,8 +56,8 @@
          (r/parse-route-string
           (u/text
            "with structure"
-           ".rail(8) Rail8.b3d"
-           ".rail(9) Rail9.b3d"
+           ".rail(8) Flushing\\KoDarkSlab3RL.b3d"
+           ".rail(9) Flushing\\KoDarkSlab3RR.b3d"
            ""
            "with track"
            "0,.railstart 1;-12.0;0.0;8,.railtype 0;9"
@@ -66,7 +67,9 @@
            ) nil))
         blocks (:blocks context)
         dir-after-curve (:direction (nth blocks 1))
-        track-tx-after-curve (:track-transform (nth blocks 1))]
+        track-tx-after-curve (:track-transform (nth blocks 1))
+        objects (map #(get-drawable-objects-in-block context %) (:blocks context))]
+
     (testing "no errors"
       (is
        (= (:errors context)
@@ -81,4 +84,10 @@
         [geom/identity-transform
          track-tx-after-curve
          track-tx-after-curve
-         track-tx-after-curve])))))
+         track-tx-after-curve])))
+
+    ;; (testing "object creating"
+    ;;   (is
+    ;;    (= (.getClass (first (first objects)))
+    ;;       nil)))
+    ))

@@ -17,7 +17,7 @@
    :command-not-found "Invalid command"
    :symbol-not-found "Could not find index %s in %s"
    :rail-already-started "Rail %d already exists"
-   :rail-not-found "Rail %d does not exist"
+   :rail-not-found "Rail %s does not exist"
    :bad-track-command "Unknown track command"})
 
 (defn- add-error [context error-key & rest]
@@ -154,7 +154,7 @@
                   :line line
                   :linenum (+ 1 (or (:linenum context) 0)))
                 line))
-             context
+             (assoc context :symbol-table {})
              (map #(util/trim %) (util/split s "\n")))))
 
 (defn- reduce-nodes [context f]
@@ -198,10 +198,23 @@
 
 (defn parse-structure-node [context node]
   (if (some #{(:type node)} supported-structures)
-    (assoc-in context [:symbol-table (str (:type node) (:arg node))]
-              (strip-comment
-               (util/replace-windows-path-chars
-                (:body node))))
+    (let [^String
+          filepath (strip-comment
+                    (util/replace-windows-path-chars
+                     (:body node)))
+          resolved (if (:debug-symbols context)
+                     {:meshes filepath :errors nil}
+                     (b3d/parse-file-from-string filepath))
+          symbol-name (str (:type node) (:arg node))]
+      (println "Resolving" symbol-name "with file" filepath)
+      (if (> (count (:errors resolved)) 0)
+        (assoc context
+          :errors (concat (:errors context)
+                          (:errors resolved)))
+        (assoc context :symbol-table
+               (assoc (:symbol-table context) symbol-name
+                      (:meshes resolved)))))
+
     (add-error context :bad-structure-command)))
 
 (defn- parse-route-node [context node]
@@ -284,6 +297,10 @@
       (if (:rails old-block)
         (into {}
               (map (fn [[railidx rail]]
+                     (if (nil? (:end rail))
+                       (println "nil end on rail" railidx
+                                (dissoc rail :prototype :walls :freeobjs))
+                       )
                      [railidx
                       (assoc rail
                         :start (:end rail)
@@ -313,6 +330,7 @@
         (if texture
           (assoc-in block [:rails railidx]
                     {:start [(float x) (float y)]
+                     :end   [(float x) (float y)]
                      :prototype texture })
           (add-node-error block node :symbol-not-found railtyp "rail")))
 
@@ -323,7 +341,8 @@
            block [:rails railidx]
            (fn [rail]
              (merge rail
-                    {:end (if (and x y) [(float x) (float y)] (:start rail))
+                    {:end (if (and x y) [(float x) (float y)]
+                              (or (:start rail) [0.0 0.0]))
                      :rail-ends true})))
           (add-node-error block node :rail-not-found railidx)))
 
@@ -332,7 +351,7 @@
         (if-let [rail (get (:rails block) railidx)]
           (if-let [texture (symbol-from-context context "rail" railtype)]
             (assoc-in block [:rails railidx :prototype] texture)
-            (add-node-error block node :symbol-not-found railidx "rail"))
+            (add-node-error block node :symbol-not-found railtype "rail"))
           (add-node-error block node :rail-not-found railidx)))
 
       (is-type node "accuracy")
@@ -450,16 +469,20 @@
 
 (defn- split [^String s ^String p] (.split s p))
 
-(defn parse-route-string [str file]
-  (parse-nodes-in-blocks-in-context
-   (parse-nodes-in-context
-    (create-blocks-in-context
-     (associate-track-refs
-      (associate-with-blocks
-        (parse-string
-         str
-         {:block-size 25.0 :file file}
-         )))))))
+(defn parse-route-string
+  ([str file] (parse-route-string str file {}))
+  ([str file rest]
+     (parse-nodes-in-blocks-in-context
+      (parse-nodes-in-context
+       (create-blocks-in-context
+        (associate-track-refs
+         (associate-with-blocks
+           (parse-string
+            str
+            (merge
+             {:block-size 25.0 :file file}
+             rest)
+            ))))))))
 
 (defn parse-route-file [^String file-path]
   (parse-route-string (slurp file-path) file-path))

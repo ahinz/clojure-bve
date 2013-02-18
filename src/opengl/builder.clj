@@ -84,12 +84,17 @@
   (if (= (count (.trim s)) 0) nil
       (read-string s)))
 
+(defn- trim-trailing-comma [^String s]
+  (if (= \, (last s))
+    (.substring s 0 (- (count s) 1))
+    s))
+
 (defn- split-body [node]
   (if (nil? node)
     []
     (map read-string-if-not-empty
          (.split
-          (.trim ^String (route/trim-trailing-comma (:body node))) ";"))))
+          (.trim ^String (trim-trailing-comma (:body node))) ";"))))
 
 (defn create-rail-objects
   [block rail track-pos]
@@ -724,29 +729,29 @@
            :next-block next-block))
        blocks (concat (rest blocks) [nil])))
 
-(def r
-  (route/resolve-symbol-table
-   (route/parse-route-file "Flushing/test.csv")))
-(def s (:symbol-table r))
-(def bv (build-block-vector (:nodes r) 25))
-(def ablock (nth bv 0))
-(def bblock (nth bv 1))
-(def cblock (nth bv 2))
-(def dblock (nth bv 3))
+;; (def r
+;;   (route/resolve-symbol-table
+;;    (route/parse-route-file "Flushing/test.csv")))
+;; (def s (:symbol-table r))
+;; (def bv (build-block-vector (:nodes r) 25))
+;; (def ablock (nth bv 0))
+;; (def bblock (nth bv 1))
+;; (def cblock (nth bv 2))
+;; (def dblock (nth bv 3))
 
-(def blocks (take 20 bv))
-(def ablocks (provide-forward-references blocks))
-(def ablocks (second
-              (reduce (fn [[context blocks] block]
-                        (let [[context block]
-                              (parse-block-information context (last blocks) block s)]
-                          [context (conj blocks block)]))
-                      [(create-starting-context s) []] ablocks)))
-(let [[context obj]
-      (reduce (fn [[context objs] block]
-                (let [[context new-objs] (create-objects-for-block2 context block)]
-                  [context
-                   (concat objs new-objs)]))
-              [(create-starting-context s) []]
-              ablocks)]
-  (def objs obj))
+;; (def blocks (take 20 bv))
+;; (def ablocks (provide-forward-references blocks))
+;; (def ablocks (second
+;;               (reduce (fn [[context blocks] block]
+;;                         (let [[context block]
+;;                               (parse-block-information context (last blocks) block s)]
+;;                           [context (conj blocks block)]))
+;;                       [(create-starting-context s) []] ablocks)))
+;; (let [[context obj]
+;;       (reduce (fn [[context objs] block]
+;;                 (let [[context new-objs] (create-objects-for-block2 context block)]
+;;                   [context
+;;                    (concat objs new-objs)]))
+;;               [(create-starting-context s) []]
+;;               ablocks)]
+;;   (def objs obj))

@@ -314,7 +314,8 @@
                ""
                ".rail(7).suffix Flushing\\oSlab.b3d;Half Tie type,"
                ".walll(1) Flushing\\TunnelL.b3d;Tunnel Wall and Ceiling (Left),"
-               ""))))
+               "")
+              {:debug-symbols true})))
           context (#'opengl.route/parse-nodes-in-context context)]
   (testing "structure elements are saved to symbol table"
     (is
@@ -352,9 +353,8 @@
                   " 25,.form 0;1;0;0,"
                   " 50,.form 0;1;0;0,"
                   " 75,.form 0;1;1;0,.wall 0;1;5,.wall 1;-1;5,.stop 0,"
-                  ;; " 80,.freeobj 0;101;1.5;3.5;0,.freeobj 0;10;-3.8;1.1;0,.freeobj 0;1;-3;0;0,.freeobj 0;1;-8;0;0,"
-
-                  "")))))))]
+                  "")
+                 {:debug-symbols true :block-size 25.0}))))))]
       (testing "No errors"
         (is (= (:errors context) '())))
 

@@ -4,8 +4,45 @@
    [opengl.geom :as geom]
    [opengl.util :as util]
    [opengl.b3d :as b3d]
+   [opengl.models :as m]
    [opengl.route :as route]]
   (:gen-class))
+
+
+(defn- apply-translate-to-mesh
+  [mesh [tx ty tz]
+   normal-transform1
+   normal-transform2]
+  (m/create-mesh
+   (map (fn [face]
+          (let [verts
+                (map (fn [vert]
+                       (let [[x y z] (geom/rotate-with-transform
+                                       (geom/rotate-with-transform
+                                         (:coordinate vert) normal-transform1)
+                                       normal-transform2)
+                             [nx ny nz] (:normal vert)
+                             [nx' ny' nz'] (geom/rotate-with-transform
+                                             (geom/rotate-with-transform
+                                               [nx ny nz] normal-transform1)
+                                             normal-transform2)]
+                         (let [v (m/create-vertex
+                                  [(+ tx x)
+                                   (+ ty y)
+                                   (+ tz z)]
+                                  (:texture-coordinate vert)
+                                  [nx' ny' nz'])]
+                           v)))
+                     (:verts face))]
+            (m/update-face face verts)))
+        (:faces mesh))))
+
+(defn- create-transformed-object
+  [prototype pos base-transform aux-transform track-position]
+  (map (fn [mesh]
+         (apply-translate-to-mesh mesh pos aux-transform base-transform))
+       prototype))
+
 
 (defn- create-track-transforms-in-block-with-direction
   [block direction]
@@ -52,12 +89,12 @@
         radius (:radius curves)
         cant (:cant curves)
         block-length (- (:end-ref block) (:start-ref block))]
-    (if (or (nil? radius) (= radius 0.0))
+    (if (or (nil? radius) (= (float radius) 0.0))
       (create-track-transforms-in-block-with-direction
         block direction)
-      (let [b (/ block-length (Math/abs radius))
-            c (Math/sqrt (* 2.0 radius radius (- 1.0 (Math/cos b))))
-            a (* -1.0 0.5 (Math/signum radius) b)]
+      (let [b (/ block-length (Math/abs (float radius)))
+            c (Math/sqrt (* 2.0 (float radius) (float radius) (- 1.0 (Math/cos b))))
+            a (* -1.0 0.5 (Math/signum (float radius)) b)]
         (create-track-transforms-in-block-with-direction
           block
           (geom/rotate-vector-2d
@@ -77,8 +114,15 @@
 
         direction (:direction block)
         position (:position block)
+
+        zzz (println "Incoming" direction position)
+
         curve (:curve block)
         height (or (:height block) 0.0)
+
+        ;;TODO remove me
+        height 0.0
+
         block-length (- (:end-ref block) (:start-ref block))
 
         end-x (or end-x start-x)
@@ -86,6 +130,7 @@
 
         [dx dy] direction
         [pxo pyo pzo] position
+
         [px py pz] (geom/vector-add position [(* dy start-x) start-y (* -1.0 dx start-x)])
 
         px2 (+ (* dx block-length) pxo)
@@ -120,15 +165,24 @@
                          (* 2.0 next-curve next-curve (- 1.0 (Math/cos b2))))
 
         a2 (* 0.5 (Math/signum next-curve) b2)
+
+        zzz (println "a2" a2 direction2)
+
         [dx2 dy2] (geom/rotate-vector-2d direction2
                                          (Math/cos (- a2)) (Math/sin (- a2)))
+
+        zzz (println "dx2" dx2 dy2)
 
         offset2 [(* dy2 end-x) end-y (* -1.0 dx2 end-x)]
         position2 (geom/vector-add offset2 [px2 py2 pz2])
 
+        zzz (println "op" offset2 position2)
+
         [pdx pdy pdz] (geom/vector-normalize (geom/vector-sub position2 [px py pz]))
 
         [norm-x norm-z] (geom/vector-normalize [pdx pdz])
+
+        zzz (println "pdx pdy pdz" pdx pdy pdz)
 
         rail-trans-z [pdx pdy pdz]
         rail-trans-x [norm-z 0.0 (* -1.0 norm-x)]
@@ -167,7 +221,8 @@
                   rail
                   (if (or (= railidx 0) (nil? next-block))
                     (create-transforms-for-player-rail block)
-                    (create-transforms-for-rail block next-block rail)
+                    (do
+                      (create-transforms-for-rail block next-block rail))
                     ))])
               (:rails block))))))
 
@@ -183,3 +238,43 @@
                       (update-position-in-block (last blocks) block block-length))
                      (next-block context block))))
             [] (:blocks context)))))
+
+(defn- get-rail-aligned-objects-in-rail [context block rail]
+  (let [[dx dy] (:start rail)
+        [x y z] (:position block)
+        x (+ dx x)
+        y (+ dy y)
+        pos [x y z]
+        rail-transform (:rail-transform rail)
+        track-pos (:start-ref block)]
+    (create-transformed-object
+     (:prototype rail) pos
+     rail-transform geom/identity-transform
+     track-pos)))
+
+(defn- get-rail-aligned-objects-in-block [context block]
+  (apply
+   concat
+   (map
+    #(get-rail-aligned-objects-in-rail context block (second %))
+    (:rails block))))
+
+(defn get-drawable-objects-in-block [context block]
+  (get-rail-aligned-objects-in-block context block))
+
+(defn get-drawable-objects-in-context [context]
+  (reduce (fn [objs block]
+            (concat
+             objs
+             (get-drawable-objects-in-block context block)))
+          []
+          (:blocks context)))
+
+(def context
+  (create-geometries-for-blocks-in-context
+   (route/parse-route-file "Flushing/test.csv")))
+
+(def context (assoc context :blocks (take 10 (:blocks context))))
+(def objs (get-drawable-objects-in-context context))
+
+(def dummy 1)

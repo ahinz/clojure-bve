@@ -1,6 +1,7 @@
 (ns opengl.opengl
   [:require
    [opengl.core :as core]
+   [opengl.objects :as objects]
    [opengl.route :as route]
    [opengl.models :as m]
    [opengl.geom :as geom]
@@ -222,7 +223,7 @@
 (def gl-context
   (ref {:camera {:eye [20.0 20.0 -50.0]
                  :center [0.0 0.0 0.0]}
-        :meshes (filter identity builder/objs)
+        :meshes (filter identity objects/objs)
     }))
 
 (defn glu-look-at [^GLUgl2 glu
@@ -273,9 +274,11 @@
 
         (.glScalef gl (float -1.0) 1.0 1.0)
 
-        (doseq [meshes-from-b3d objs]
-          (doseq [mesh meshes-from-b3d]
-            (gl-render-mesh gl mesh)))
+        ;; (doseq [meshes-from-b3d objs]
+        ;;   (doseq [mesh meshes-from-b3d]
+        ;;     (gl-render-mesh gl mesh)))
+        (doseq [mesh objs]
+          (gl-render-mesh gl mesh))
 
         (gl-draw-axis gl)
         (display-fps gl)))
@@ -349,16 +352,4 @@
   '())
 
 ;(set-looking-at canvas 20.0 20.0 -50.0)
-;(set-looking-at canvas 1.0 10.0 -50.0)
-;(set-center canvas 0.0 0.0 10.0)
-;(set-center canvas 0.0 0.0 120.0)
-;(set-looking-at canvas 1.0 5.0 60.0)
-(set-center canvas 0.0 0.0 400.0)
-(set-looking-at canvas 1.0 5.0 10.0)
-;(set-center canvas 0.0 0.0 400.0)
-;(set-looking-at canvas 1.0 5.0 -10.0)
-;(set-looking-at canvas 1.0 5.0 50.0)
-(set-looking-at canvas 1.0 3.0 60.0)
-;(set-looking-at canvas 1.0 3.0 10.0)
-(set-center canvas 40.0 0.0 500.0)
-(set-looking-at canvas 23.0 3.0 400.0)
+(set-looking-at canvas 1.0 15.0 -50.0)

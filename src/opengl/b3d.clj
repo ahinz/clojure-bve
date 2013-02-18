@@ -243,3 +243,7 @@
 
 (defn parse-file [^java.io.File f]
   (parse-string (slurp f) {:path (.getParent f)}))
+
+(defn parse-file-from-string [^String s]
+  (try (parse-file (java.io.File. s))
+       (catch Exception e {:errors (format "File not found %s" s)})))
