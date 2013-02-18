@@ -204,11 +204,6 @@
      :position [px py pz]
      :direction direction}))
 
-(defn- next-block [context block]
-  (nth (:blocks context)
-       (int (/ (:end-ref block) (:block-size context)))
-       nil))
-
 (defn- create-rail-transforms-in-block [block next-block]
   (assoc
       block :rails
@@ -236,7 +231,7 @@
                      (create-track-transforms-in-block
                       (last blocks)
                       (update-position-in-block (last blocks) block block-length))
-                     (next-block context block))))
+                     (route/next-block context block))))
             [] (:blocks context)))))
 
 (defn- get-rail-aligned-objects-in-rail [context block rail]
@@ -274,7 +269,7 @@
   (create-geometries-for-blocks-in-context
    (route/parse-route-file "Flushing/test.csv")))
 
-(def context (assoc context :blocks (take 10 (:blocks context))))
+(def context (assoc context :blocks (drop 4 (take 20 (:blocks context)))))
 (def objs (get-drawable-objects-in-context context))
 
 (def dummy 1)

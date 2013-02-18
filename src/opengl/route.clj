@@ -295,17 +295,19 @@
   (assoc
       new-block :rails
       (if (:rails old-block)
-        (into {}
-              (map (fn [[railidx rail]]
-                     (if (nil? (:end rail))
-                       (println "nil end on rail" railidx
-                                (dissoc rail :prototype :walls :freeobjs))
-                       )
-                     [railidx
+        (reduce (fn [rails [railidx rail]]
+                  (if (nil? (:end rail))
+                    (println "nil end on rail" railidx
+                             (dissoc rail :prototype :walls :freeobjs)))
+                  (if (:rail-ends rail)
+                    rails
+                    (assoc rails
+                      railidx
                       (assoc rail
                         :start (:end rail)
-                        :end (:end rail))])
-                   (filter #(nil? (:rail-ends %)) (:rails old-block))))
+                        :end (:end rail)))))
+                {}
+                (:rails old-block))
         {0 {:start [0.0 0.0] :end [0.0 0.0]}})))
 
 (defn- parse-nodes-in-block [context block prev-block]
@@ -342,6 +344,8 @@
            (fn [rail]
              (merge rail
                     {:end (if (and x y) [(float x) (float y)]
+                              (or (:start rail) [0.0 0.0]))
+                     :start (if (and x y) [(float x) (float y)]
                               (or (:start rail) [0.0 0.0]))
                      :rail-ends true})))
           (add-node-error block node :rail-not-found railidx)))
@@ -467,22 +471,62 @@
 (defn- create-blocks-in-context [context]
   (assoc context :blocks (into [] (create-blocks context))))
 
+(defn next-block [context block]
+  (nth (:blocks context)
+       (int (/ (:end-ref block) (:block-size context)))
+       nil))
+
+(defn- filter-end-rails [block]
+  (assoc block :rails
+         (reduce (fn [rails [railidx rail]]
+                   (if (:rail-ends rail)
+                     (do (println "Ending rail" (:rail-ends rail)) rails)
+                     (assoc rails railidx rail)))
+                 {} (:rails block))))
+
+(defn- pull-rail-ends [block next-block]
+  (let [next-rails (:rails next-block)
+        cur-rails (:rails block)]
+    (assoc
+        block :rails
+        (into
+         {}
+         (map
+          (fn [[railidx rail]]
+            [railidx
+             (if-let [next-rail (get next-rails railidx)]
+               (assoc rail :end (:start next-rail))
+               rail)])
+          cur-rails)))))
+
+(defn- pull-rail-ends-in-context [context]
+  (assoc
+      context :blocks
+      (reduce (fn [blocks block]
+                (conj blocks
+                      (pull-rail-ends
+                       block
+                       (next-block context block))))
+              []
+              (:blocks context))))
+
 (defn- split [^String s ^String p] (.split s p))
 
 (defn parse-route-string
   ([str file] (parse-route-string str file {}))
   ([str file rest]
-     (parse-nodes-in-blocks-in-context
-      (parse-nodes-in-context
-       (create-blocks-in-context
-        (associate-track-refs
-         (associate-with-blocks
-           (parse-string
-            str
-            (merge
-             {:block-size 25.0 :file file}
-             rest)
-            ))))))))
+     (pull-rail-ends-in-context
+      (parse-nodes-in-blocks-in-context
+       (parse-nodes-in-context
+        (create-blocks-in-context
+         (associate-track-refs
+          (associate-with-blocks
+            (parse-string
+             str
+             (merge
+              {:block-size 25.0 :file file}
+              rest)
+             )))))))))
 
 (defn parse-route-file [^String file-path]
   (parse-route-string (slurp file-path) file-path))
