@@ -242,6 +242,98 @@
       (* dy (:z (get-y rail-transform)))
       (* dz (:z (get-z rail-transform))))])
 
+(defn- filter-not-nil [f] (filter identity f))
+
+; this is copied from https://github.com/sladen/openbve/blob/master/openBVE/OpenBve/OldParsers/CsvRwRouteParser.cs#L4634
+(defn- transform-form-object [prototype neardist fardist]
+  (when prototype
+    (let [mesh (first prototype)
+          faces (:faces mesh)
+          face (first faces)
+          verts (:verts face)
+
+          x-sub (fn [v s]
+                  (when v
+                    (let [[x y z] (:coordinate v)]
+                      (m/update-vertex v [(- s x) y z]))))
+
+          [_ _ x2 x3 _ _ x6 x7] verts
+          [x2 x3 x6 x7] [(x-sub x2 neardist)
+                         (x-sub x3 fardist)
+                         (x-sub x6 neardist)
+                         (x-sub x7 fardist)]
+
+          update-vector [x3 x2 nil nil x7 x6 nil nil]
+
+          tx-vector (map (fn [orig-v new-v]
+                           (or new-v orig-v))
+                         verts update-vector)
+
+          new-face (m/update-face face tx-vector)
+          new-mesh (m/create-mesh [new-face])]
+      [new-mesh])))
+
+(defn create-form-object [context block form]
+  (if (nil? form)
+    []
+    (let [symbol-table (:symbol-table context)
+
+          ;; position (:position block)
+          ;; direction (:direction block)
+          ;; [dir-x dir-y] direction
+
+          roof-idx (:roof-idx form)
+          form-idx (:form-idx form)
+
+          rail1 (get (:rails block) (:rail1 form))
+          rail2 (get (:rails block) (:rail2 form))
+
+          rail-transform1 (:rail-transform rail1)
+          rail-transform2 (:rail-transform rail2)
+
+          [dx1 dy1] (:start rail1)
+          [dx2 dy2] (:start rail2)
+
+          [dx1e _] (:end rail1)
+          [dx2e _] (:end rail2)
+
+          dx1e (or dx1e dx1)
+          dx2e (or dx2e dx2)
+          delta-start (- dx2 dx1)
+          delta-end (- dx2e dx1e)
+
+          p1 (:position rail1)
+          p2 (:position rail2)
+
+          prototype-form-l (get symbol-table (str "forml" form-idx))
+          prototype-form-cl (transform-form-object
+                             (get symbol-table (str "formcl" form-idx))
+                             delta-start delta-end)
+
+          prototype-roof-l (get symbol-table (str "roofl" roof-idx))
+          prototype-roof-cl (transform-form-object
+                             (get symbol-table (str "roofcl" roof-idx))
+                             delta-start delta-end)
+
+          prototype-sec-rail-form-r (get symbol-table (str "formr" form-idx))
+          prototype-sec-rail-roof-r (get symbol-table (str "roofr" roof-idx))
+
+          prototypes-1 [prototype-form-l prototype-form-cl
+                        prototype-roof-l prototype-roof-cl]
+
+          prototypes-2 [prototype-sec-rail-form-r
+                        prototype-sec-rail-roof-r]
+
+          renderer #(create-transformed-object
+                     %1 %2 %3 geom/identity-transform
+                     0) ; track position, un-used?
+          ]
+      (concat
+       (map #(renderer % p1 rail-transform1) (filter-not-nil prototypes-1))
+       (map #(renderer % p2 rail-transform2) (filter-not-nil prototypes-2)))
+      ))
+  )
+
 (defn- get-rail-aligned-objects-in-rail [context block rail]
   (let [[dx dy] (:start rail)
         [x y z] (:position block)
@@ -291,7 +383,9 @@
     (:rails block))))
 
 (defn get-drawable-objects-in-block [context block]
-  (get-rail-aligned-objects-in-block context block))
+  (concat
+   (get-rail-aligned-objects-in-block context block)
+   (create-form-object context block (:form block))))
 
 (defn get-drawable-objects-in-context [context]
   (reduce (fn [objs block]
@@ -305,7 +399,7 @@
 (def context
   (create-geometries-for-blocks-in-context context1))
 
-(def context (assoc context :blocks (take 6 (:blocks context))))
+(def context (assoc context :blocks (take 40 (:blocks context))))
 (def objs (get-drawable-objects-in-context context))
 
 (def dummy 1)

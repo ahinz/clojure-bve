@@ -351,5 +351,5 @@
       (assoc context :camera updated-camera))))
   '())
 
-(set-center canvas 0.0 0.0 150)
-(set-looking-at canvas 1.0 3.0 50.0)
+(set-center canvas 22.0 0.0 400)
+(set-looking-at canvas 15.0 3.0 340.0)

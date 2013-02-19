@@ -196,21 +196,28 @@
    "roofl" "roofr" "roofcl" "roofcr"
    "crackl" "crackr" "freeobj" "beacon"])
 
+(defn- strip-prefix-char [^String s]
+  (if (= (first s) \/) (.substring s 1) s))
+
 (defn parse-structure-node [context node]
   (if (some #{(:type node)} supported-structures)
     (let [^String
-          filepath (strip-comment
-                    (util/replace-windows-path-chars
-                     (:body node)))
+          filepath (strip-prefix-char
+                    (strip-comment
+                     (util/replace-windows-path-chars
+                      (:body node))))
           resolved (if (:debug-symbols context)
                      {:meshes filepath :errors nil}
                      (b3d/parse-file-from-string filepath))
           symbol-name (str (:type node) (:arg node))]
-      (println "Resolving" symbol-name "with file" filepath)
+      (println "Resolving" symbol-name "with file" filepath
+               (count (:errors resolved)))
       (if (> (count (:errors resolved)) 0)
-        (assoc context
-          :errors (concat (:errors context)
-                          (:errors resolved)))
+        (do
+          (println (:errors resolved))
+          (assoc context
+            :errors (concat (:errors context)
+                           (:errors resolved))))
         (assoc context :symbol-table
                (assoc (:symbol-table context) symbol-name
                       (:meshes resolved)))))
@@ -312,6 +319,7 @@
                     (assoc rails
                       railidx
                       (assoc rail
+                        :freeobjs []
                         :start (:end rail)
                         :end (:end rail)))))
                 {}
