@@ -115,8 +115,6 @@
         direction (:direction block)
         position (:position block)
 
-        zzz (println "Incoming" direction position)
-
         curve (:curve block)
         height (or (:height block) 0.0)
 
@@ -166,23 +164,15 @@
 
         a2 (* 0.5 (Math/signum next-curve) b2)
 
-        zzz (println "a2" a2 direction2)
-
         [dx2 dy2] (geom/rotate-vector-2d direction2
                                          (Math/cos (- a2)) (Math/sin (- a2)))
-
-        zzz (println "dx2" dx2 dy2)
 
         offset2 [(* dy2 end-x) end-y (* -1.0 dx2 end-x)]
         position2 (geom/vector-add offset2 [px2 py2 pz2])
 
-        zzz (println "op" offset2 position2)
-
         [pdx pdy pdz] (geom/vector-normalize (geom/vector-sub position2 [px py pz]))
 
         [norm-x norm-z] (geom/vector-normalize [pdx pdz])
-
-        zzz (println "pdx pdy pdz" pdx pdy pdz)
 
         rail-trans-z [pdx pdy pdz]
         rail-trans-x [norm-z 0.0 (* -1.0 norm-x)]
@@ -234,6 +224,24 @@
                      (route/next-block context block))))
             [] (:blocks context)))))
 
+(defn- get-x [tx] (nth tx 0))
+(defn- get-y [tx] (nth tx 1))
+(defn- get-z [tx] (nth tx 2))
+
+(defn- rotate-free-obj [rail-transform [px py pz] [dx dy dz]]
+  [(+ px
+      (* dx (:x (get-x rail-transform)))
+      (* dy (:x (get-y rail-transform)))
+      (* dz (:x (get-z rail-transform))))
+   (+ py
+      (* dx (:y (get-x rail-transform)))
+      (* dy (:y (get-y rail-transform)))
+      (* dz (:y (get-z rail-transform))))
+   (+ pz
+      (* dx (:z (get-x rail-transform)))
+      (* dy (:z (get-y rail-transform)))
+      (* dz (:z (get-z rail-transform))))])
+
 (defn- get-rail-aligned-objects-in-rail [context block rail]
   (let [[dx dy] (:start rail)
         [x y z] (:position block)
@@ -242,14 +250,42 @@
         pos [x y z]
         rail-transform (:rail-transform rail)
         track-pos (:start-ref block)]
-    (create-transformed-object
-     (:prototype rail) pos
-     rail-transform geom/identity-transform
-     track-pos)))
+    (concat
+     ;; Rails
+     (create-transformed-object
+      (:prototype rail) pos
+      rail-transform geom/identity-transform
+      track-pos)
 
+     ;; Freeobjs
+     (map
+      (fn [freeobj]
+        (let [x (:x freeobj)
+              y (:y freeobj)
+              z (:z freeobj)
+              position (rotate-free-obj rail-transform
+                                        pos
+                                        [x y z])]
+          (create-transformed-object
+           (:prototype freeobj)
+           position
+           rail-transform
+           (geom/transform-create (:yaw freeobj)
+                                  (:pitch freeobj)
+                                  (:roll freeobj))
+           track-pos)))
+      (:freeobjs rail))
+
+     ;; Walls
+     (map
+      #(create-transformed-object
+        (second %) pos
+        rail-transform geom/identity-transform
+        track-pos) (:walls rail)))))
+
+(defn- flatten1 [l] (apply concat l))
 (defn- get-rail-aligned-objects-in-block [context block]
-  (apply
-   concat
+  (flatten1
    (map
     #(get-rail-aligned-objects-in-rail context block (second %))
     (:rails block))))
@@ -265,11 +301,11 @@
           []
           (:blocks context)))
 
+(def context1 (route/parse-route-file "Flushing/test.csv"))
 (def context
-  (create-geometries-for-blocks-in-context
-   (route/parse-route-file "Flushing/test.csv")))
+  (create-geometries-for-blocks-in-context context1))
 
-(def context (assoc context :blocks (drop 4 (take 20 (:blocks context)))))
+(def context (assoc context :blocks (take 6 (:blocks context))))
 (def objs (get-drawable-objects-in-context context))
 
 (def dummy 1)

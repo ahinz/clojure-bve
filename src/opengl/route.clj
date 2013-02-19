@@ -273,7 +273,7 @@
 (defn begin-repeat [context node block railidx structidx dir key sym]
   (let [left-texture (symbol-from-context context (str key "l") structidx)
         right-texture (symbol-from-context context (str key "r") structidx)]
-    (if (get (:rails block) railidx)
+    (if-let [rail (get (:rails block) railidx)]
       (cond
        (and (or (= dir 0) (= dir -1)) (nil? left-texture))
        (add-node-error block node :symbol-not-found structidx (str key "l"))
@@ -282,13 +282,21 @@
        (add-node-error block node :symbol-not-found structidx (str key "r"))
 
        (= dir 1)
-       (assoc-in block [:rails railidx sym] [right-texture])
+       (let [walls (assoc (:walls rail) :right right-texture)
+             rail (assoc rail :walls walls)
+             rails (assoc (:rails block) railidx rail)]
+         (assoc block :rails rails))
 
        (= dir -1)
-       (assoc-in block [:rails railidx sym] [left-texture])
+       (let [walls (assoc (:walls rail) :left left-texture)
+             rail (assoc rail :walls walls)
+             rails (assoc (:rails block) railidx rail)]
+         (assoc block :rails rails))
 
        :else
-       (assoc-in block [:rails railidx sym] [right-texture]))
+       (assoc-in
+        (assoc-in block [:rails railidx sym :left] left-texture)
+        [:rails railidx sym :right] right-texture))
       (add-node-error block node :rail-not-found railidx))))
 
 (defn- copy-rails [old-block new-block]
@@ -330,10 +338,12 @@
       (let [[railidx x y railtyp] (split-body node)
             texture (symbol-from-context context "rail" railtyp)]
         (if texture
-          (assoc-in block [:rails railidx]
-                    {:start [(float x) (float y)]
-                     :end   [(float x) (float y)]
-                     :prototype texture })
+          (update-in
+           block [:rails railidx]
+           (fn [rail]
+             (merge rail {:start [(float x) (float y)]
+                          :end   [(float x) (float y)]
+                          :prototype texture })))
           (add-node-error block node :symbol-not-found railtyp "rail")))
 
       (is-type node "railend")
@@ -409,7 +419,7 @@
             (update-in block [:rails railidx :freeobjs]
                        (fn [freeobjs]
                          (conj (or freeobjs [])
-                               {:x x :y y
+                               {:x x :y y :z (- (:track-ref node) (:start-ref block))
                                 :yaw yaw :pitch pitch :roll roll
                                 :prototype texture})))
             (add-node-error block node :symbol-not-found freeobj "freeobj"))

@@ -222,8 +222,8 @@
 
 (def gl-context
   (ref {:camera {:eye [20.0 20.0 -50.0]
-                 :center [0.0 0.0 0.0]}
-        :meshes (filter identity objects/objs)
+                 :center [0.0 0.0 50.0]}
+        :meshes (flatten (filter identity objects/objs))
     }))
 
 (defn glu-look-at [^GLUgl2 glu
@@ -352,4 +352,4 @@
   '())
 
 (set-center canvas 0.0 0.0 150)
-(set-looking-at canvas 1.0 15.0 70.0)
+(set-looking-at canvas 1.0 3.0 50.0)

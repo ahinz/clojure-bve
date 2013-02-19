@@ -71,14 +71,9 @@
          (apply-translate-to-mesh mesh pos aux-transform base-transform))
        prototype))
 
-(defn- get-x [tx]
-  (nth tx 0))
-
-(defn- get-y [tx]
-  (nth tx 1))
-
-(defn- get-z [tx]
-  (nth tx 2))
+(defn- get-x [tx] (nth tx 0))
+(defn- get-y [tx] (nth tx 1))
+(defn- get-z [tx] (nth tx 2))
 
 (defn- read-string-if-not-empty [^String s]
   (if (= (count (.trim s)) 0) nil
