@@ -310,6 +310,8 @@
                              (get symbol-table (str "formcl" form-idx))
                              delta-start delta-end)
 
+          zzzz (println "Check" delta-start delta-end)
+
           prototype-roof-l (get symbol-table (str "roofl" roof-idx))
           prototype-roof-cl (transform-form-object
                              (get symbol-table (str "roofcl" roof-idx))

@@ -19,6 +19,12 @@
 
 (set! *warn-on-reflection* true)
 
+(def gl-context
+  (ref {:camera {:eye [20.0 20.0 -50.0]
+                 :center [0.0 0.0 50.0]}
+        :meshes (to-array (flatten (filter identity objects/objs)))
+    }))
+
 (def textures (ref {}))
 
 (defn gl-create-textures [^GL2 gl n]
@@ -136,6 +142,18 @@
 
     (.glVertex3f gl x y z)))
 
+(defn- gl-set-blend-mode [^GL2 gl blend]
+  (when (not= (:last-blend @gl-context) blend)
+    (if blend
+      (if (= blend "additive")
+        (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE)
+        (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
+      (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
+    (dosync
+     (ref-set
+      gl-context
+      (assoc @gl-context :last-blend blend)))))
+
 (defn gl-render-face [^GL2 gl face]
   (let [material (:material face)
         blend-mode (:blend-mode material)
@@ -148,11 +166,7 @@
       (gl-enable-texture-2d gl)
       (gl-bind-current-texture gl texture-info))
 
-    (if (:mode blend-mode)
-      (if (= (:mode blend-mode) "additive")
-        (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE)
-        (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
-      (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
+    (gl-set-blend-mode gl (:mode blend-mode))
 
     (if color
       (let [[r g b] color]
@@ -196,6 +210,22 @@
               (gl-bind-texture-to-file gl tid file))
        not-loaded-files texture-ids))))
 
+(def display-lists
+  (ref {}))
+
+(defn gl-render-mesh-or-display-list [^GL2 gl ^Object mesh]
+  (if-let [^Integer display-list (get @display-lists (.hashCode mesh))]
+    (.glCallList gl display-list)
+    (let [display-list (.glGenLists gl 1)]
+      (.glNewList gl display-list GL2/GL_COMPILE)
+      (gl-render-mesh gl mesh)
+      (.glEndList gl)
+      (.glCallList gl display-list)
+      (dosync
+       (ref-set
+        display-lists
+        (assoc @display-lists (.hashCode mesh) display-list))))))
+
 (defn gl-render-mesh [gl mesh]
   (doseq [face (:faces mesh)]
     (gl-preload-textures gl
@@ -219,12 +249,6 @@
     (.glVertex3d 0.0 0.0 0.0)
     (.glVertex3d 0.0 0.0 100.0)
     (.glEnd)))
-
-(def gl-context
-  (ref {:camera {:eye [20.0 20.0 -50.0]
-                 :center [0.0 0.0 50.0]}
-        :meshes (flatten (filter identity objects/objs))
-    }))
 
 (defn glu-look-at [^GLUgl2 glu
                    ^Double ex ^Double ey ^Double ez
@@ -278,7 +302,7 @@
         ;;   (doseq [mesh meshes-from-b3d]
         ;;     (gl-render-mesh gl mesh)))
         (doseq [mesh objs]
-          (gl-render-mesh gl mesh))
+          (gl-render-mesh-or-display-list gl mesh))
 
         (gl-draw-axis gl)
         (display-fps gl)))
@@ -337,9 +361,9 @@
       (assoc context :camera updated-camera))))
   '())
 
-(def canvas (first (make-canvas)))
-(def anim (FPSAnimator. canvas 10))
-(.start anim)
+;; (def canvas (first (make-canvas)))
+;; (def anim (FPSAnimator. canvas 10))
+;; (.start anim)
 
 (defn set-center [canvas x y z]
   (dosync
@@ -351,5 +375,9 @@
       (assoc context :camera updated-camera))))
   '())
 
-(set-center canvas 22.0 0.0 400)
-(set-looking-at canvas 15.0 3.0 340.0)
+(defn -main [];;
+  (let [^GLCanvas canvas (first (make-canvas))
+        anim (FPSAnimator. canvas 10)]
+    (.start anim)
+    (set-center canvas 22.0 0.0 400)
+    (set-looking-at canvas 15.0 3.0 340.0)))
