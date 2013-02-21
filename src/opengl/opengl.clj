@@ -298,7 +298,7 @@
 (def IntersectsSphere 0)
 (def InsideOfSphere 1)
 
-(defn- sphere-in-plane [n d c radius]
+(defn- sphere-in-plane ^long [n d c radius]
   (let [^float dist (distance-from-plane2 n d c)]
     (cond
      (< dist (- radius))
@@ -317,10 +317,10 @@
           d (aget plane 3)
           contains (sphere-in-plane plane d c radius)]
       (cond
-       (= contains IntersectsSphere)
+       (== contains IntersectsSphere)
        true
 
-       (= contains InsideOfSphere)
+       (== contains InsideOfSphere)
        (recur planes (+ 1 offset) c radius)
 
        :else ;; OutsideOfSphere
