@@ -43,16 +43,20 @@
        (sqr (- y2 y1))
        (sqr (- z2 z1)))))
 
+(defrecord Sphere
+    [^doubles center ^double radius])
+
 (defn- create-bounding-sphere-for-faces [faces]
   (let [verts (apply concat (map #(:verts %) faces))
         center (vert-scala-div
                 (reduce vert-add verts)
                 (count verts))]
-    {:center center
-     :radius (if (= (count verts) 0)
-               0.0
-               (Math/sqrt
-                (apply max (map #(vert-distance-sqr center %) verts))))}))
+    (Sphere.
+     (double-array center)
+     (if (= (count verts) 0)
+       0.0
+       (Math/sqrt
+        (apply max (map #(vert-distance-sqr center %) verts)))))))
 
 (defn create-mesh [faces]
   (Mesh. faces (create-bounding-sphere-for-faces faces)))

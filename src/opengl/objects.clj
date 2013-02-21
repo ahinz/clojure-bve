@@ -399,7 +399,7 @@
 (def context
   (create-geometries-for-blocks-in-context context1))
 
-(def context (assoc context :blocks (take 500 (:blocks context))))
+;(def context (assoc context :blocks (take 500 (:blocks context))))
 (def objs (get-drawable-objects-in-context context))
 
 (def dummy 1)

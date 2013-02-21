@@ -232,8 +232,8 @@
     (gl-render-face gl face)))
 
 (defn- create-plane [normal pt]
-  (let [n (geom/vector-normalize normal)]
-    [n (- (geom/vector-inner-product n pt))]))
+  (let [[nx ny nz] (geom/vector-normalize normal)]
+    (double-array [nx ny nz (- (geom/vector-inner-product [nx ny nz] pt))])))
 
 (def ang2rad (/ Math/PI 180.0))
 ;; From:
@@ -261,35 +261,35 @@
         norm (geom/vector-cross
               (geom/vector-normalize
                (geom/vector-sub pt p)) X)
-        top [norm pt]
+        top (create-plane norm pt)
 
         pt (geom/vector-sub nc (geom/vector-mult-scalar Y nh))
         norm (geom/vector-cross X
               (geom/vector-normalize
                (geom/vector-sub pt p)))
-        bot [norm pt]
+        bot (create-plane norm pt)
 
         pt (geom/vector-sub nc (geom/vector-mult-scalar X nw))
         norm (geom/vector-cross
               (geom/vector-normalize
                (geom/vector-sub pt p)) Y)
-        left [norm pt]
+        left (create-plane norm pt)
 
         pt (geom/vector-add nc (geom/vector-mult-scalar X nw))
         norm (geom/vector-cross Y
               (geom/vector-normalize
                (geom/vector-sub pt p)))
-        right [norm pt]
+        right (create-plane norm pt)
 
-        far [Z fc]
-        near [(geom/vector-sub [0.0 0.0 0.0] Z) nc]]
-    (map (fn [[norm pt]]
-           (create-plane norm pt))
-         ;[near far top bot left right]
-         ;[near top bot]
-         [top bot left right near far
-          ]
-         )))
+        far (create-plane Z fc)
+        near (create-plane (geom/vector-sub [0.0 0.0 0.0] Z) nc)]
+    (object-array [top bot left right near far])))
+
+(defn- distance-from-plane2 [^doubles n ^double d ^doubles p]
+  (+ d
+     (+ (* (aget n 0) (aget p 0))
+        (+ (* (aget n 1) (aget p 1))
+           (+ (* (aget n 2) (aget p 2)))))))
 
 (defn- distance-from-plane [[normal d] x]
   (+ d (geom/vector-inner-product normal x)))
@@ -298,28 +298,30 @@
 (def IntersectsSphere 0)
 (def InsideOfSphere 1)
 
-(defn- sphere-in-plane [plane sphere]
-  (let [^float dist (distance-from-plane plane (:center sphere))]
+(defn- sphere-in-plane [n d c radius]
+  (let [^float dist (distance-from-plane2 n d c)]
     (cond
-     (< dist (- (:radius sphere)))
+     (< dist (- radius))
      OutsideOfSphere
 
-     (< (Math/abs dist) (:radius sphere))
+     (< (Math/abs dist) radius)
      IntersectsSphere
 
      :else
      InsideOfSphere)))
 
-(defn- sphere-in-planes [planes sphere]
-  (if (empty? planes)
+(defn- sphere-in-planes [^objects planes ^long offset ^doubles c ^double radius]
+  (if (>= offset (alength planes))
     true
-    (let [contains (sphere-in-plane (first planes) sphere)]
+    (let [^doubles plane (aget planes offset)
+          d (aget plane 3)
+          contains (sphere-in-plane plane d c radius)]
       (cond
        (= contains IntersectsSphere)
        true
 
        (= contains InsideOfSphere)
-       (recur (rest planes) sphere)
+       (recur planes (+ 1 offset) c radius)
 
        :else ;; OutsideOfSphere
        false))))
@@ -423,11 +425,12 @@
                       [0.0 1.0 0.0])
               culled (reduce
                       (fn [culled mesh]
-                        (if (sphere-in-planes planes (:bounding-sphere mesh))
-                          (do
-                            (gl-render-mesh-or-display-list gl mesh)
-                            culled)
-                          (+ 1 culled)))
+                        (let [^opengl.models.Sphere s (:bounding-sphere mesh)]
+                          (if (sphere-in-planes planes 0 (.center s) (.radius s))
+                           (do
+                             (gl-render-mesh-or-display-list gl mesh)
+                             culled)
+                           (+ 1 culled))))
                       0 objs)]
 
           (println
@@ -526,7 +529,7 @@
 (defn -main []
   (dosync (ref-set display-lists {}))
   (let [^GLCanvas canvas (first (make-canvas))
-        anim (FPSAnimator. canvas 30)]
+        anim (FPSAnimator. canvas 60)]
     (.start anim)
     (dosync (ref-set gl-context
                      (assoc @gl-context :simulation-state (s/base-state))))
