@@ -289,21 +289,19 @@
        (add-node-error block node :symbol-not-found structidx (str key "r"))
 
        (= dir 1)
-       (let [walls (assoc (:walls rail) :right right-texture)
-             rail (assoc rail :walls walls)
+       (let [rail (assoc rail :walls {:right right-texture})
              rails (assoc (:rails block) railidx rail)]
          (assoc block :rails rails))
 
        (= dir -1)
-       (let [walls (assoc (:walls rail) :left left-texture)
-             rail (assoc rail :walls walls)
+       (let [rail (assoc rail :walls {:left left-texture})
              rails (assoc (:rails block) railidx rail)]
          (assoc block :rails rails))
 
        :else
-       (assoc-in
-        (assoc-in block [:rails railidx sym :left] left-texture)
-        [:rails railidx sym :right] right-texture))
+       (assoc-in block [:rails railidx sym]
+                 {:left left-texture
+                  :right right-texture}))
       (add-node-error block node :rail-not-found railidx))))
 
 (defn- copy-rails [old-block new-block]
@@ -440,7 +438,9 @@
       (is-type node "wallend")
       (let [railidx (read-string (:body node))]
         (if (get (:rails block) railidx)
-          (assoc-in block [:rails railidx :wall-end] true)
+          (do
+            (println "Ending rail!" (:start-ref block) railidx)
+            (assoc-in block [:rails railidx :walls] {}))
           (add-node-error block node :rail-not-found railidx)))
 
       (is-type node "dike")
@@ -468,6 +468,8 @@
                   context (assoc context :errors
                                  (concat (or (:errors context) []) (:errors block)))
                   block (dissoc block :errors)]
+              (println "walls"
+                       (map #(keys (:walls (second %))) (:rails block)))
               (assoc context :blocks
                      (conj (or (:blocks context) []) block))))
           (assoc context :blocks [])

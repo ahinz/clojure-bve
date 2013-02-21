@@ -21,10 +21,41 @@
   (create-vertex coordinate (:texture-coordinate vertex) (:normal vertex)))
 
 (defrecord Mesh
-    [faces])
+    [faces bounding-sphere])
+
+(defn- vert-add
+  ([] [0.0 0.0 0.0])
+  ([v1 v2]
+     (map
+      +
+      (or (:coordinate v1) v1)
+      (or (:coordinate v2) v2))))
+
+(defn- vert-scala-div [[x y z] d]
+  [(/ x (float d)) (/ y (float d)) (/ z (float d))])
+
+(defn- sqr [x] (* x x))
+
+(defn- vert-distance-sqr [v1 v2]
+  (let [[x1 y1 z1] (or (:coordinate v1) v1)
+        [x2 y2 z2] (or (:coordinate v2) v2)]
+    (+ (sqr (- x2 x1))
+       (sqr (- y2 y1))
+       (sqr (- z2 z1)))))
+
+(defn- create-bounding-sphere-for-faces [faces]
+  (let [verts (apply concat (map #(:verts %) faces))
+        center (vert-scala-div
+                (reduce vert-add verts)
+                (count verts))]
+    {:center center
+     :radius (if (= (count verts) 0)
+               0.0
+               (Math/sqrt
+                (apply max (map #(vert-distance-sqr center %) verts))))}))
 
 (defn create-mesh [faces]
-  (Mesh. faces))
+  (Mesh. faces (create-bounding-sphere-for-faces faces)))
 
 (defrecord Face
     [verts material two-sided])

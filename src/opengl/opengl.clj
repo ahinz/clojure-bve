@@ -231,6 +231,99 @@
               (map textures-in-vertex face))))
     (gl-render-face gl face)))
 
+(defn- create-plane [normal pt]
+  (let [n (geom/vector-normalize normal)]
+    [n (- (geom/vector-inner-product n pt))]))
+
+(def ang2rad (/ Math/PI 180.0))
+;; From:
+;; http://www.lighthouse3d.com/tutorials/view-frustum-culling/geometric-approach-implementation/
+(defn- create-frustum-planes
+  [angle ratio nearD farD p [dx dz] [ux uy uz]]
+  (let [[px py pz] p
+        Z (geom/vector-normalize [(- dx) 0.0 (- dz)])
+        X (geom/vector-normalize
+           (geom/vector-cross [ux uy uz] Z))
+        Y (geom/vector-cross Z X)
+
+        tang (Math/tan (* ang2rad angle 0.5))
+        nh (* nearD tang)
+        nw (* nh ratio)
+
+        fh (* farD tang)
+        fw (* fh ratio)
+
+        ;; center of near and far planes
+        nc (geom/vector-sub p (geom/vector-mult-scalar Z nearD))
+        fc (geom/vector-sub p (geom/vector-mult-scalar Z farD))
+
+        pt (geom/vector-add nc (geom/vector-mult-scalar Y nh))
+        norm (geom/vector-cross
+              (geom/vector-normalize
+               (geom/vector-sub pt p)) X)
+        top [norm pt]
+
+        pt (geom/vector-sub nc (geom/vector-mult-scalar Y nh))
+        norm (geom/vector-cross X
+              (geom/vector-normalize
+               (geom/vector-sub pt p)))
+        bot [norm pt]
+
+        pt (geom/vector-sub nc (geom/vector-mult-scalar X nw))
+        norm (geom/vector-cross
+              (geom/vector-normalize
+               (geom/vector-sub pt p)) Y)
+        left [norm pt]
+
+        pt (geom/vector-add nc (geom/vector-mult-scalar X nw))
+        norm (geom/vector-cross Y
+              (geom/vector-normalize
+               (geom/vector-sub pt p)))
+        right [norm pt]
+
+        far [Z fc]
+        near [(geom/vector-sub [0.0 0.0 0.0] Z) nc]]
+    (map (fn [[norm pt]]
+           (create-plane norm pt))
+         ;[near far top bot left right]
+         ;[near top bot]
+         [top bot left right near far
+          ]
+         )))
+
+(defn- distance-from-plane [[normal d] x]
+  (+ d (geom/vector-inner-product normal x)))
+
+(def OutsideOfSphere -1)
+(def IntersectsSphere 0)
+(def InsideOfSphere 1)
+
+(defn- sphere-in-plane [plane sphere]
+  (let [^float dist (distance-from-plane plane (:center sphere))]
+    (cond
+     (< dist (- (:radius sphere)))
+     OutsideOfSphere
+
+     (< (Math/abs dist) (:radius sphere))
+     IntersectsSphere
+
+     :else
+     InsideOfSphere)))
+
+(defn- sphere-in-planes [planes sphere]
+  (if (empty? planes)
+    true
+    (let [contains (sphere-in-plane (first planes) sphere)]
+      (cond
+       (= contains IntersectsSphere)
+       true
+
+       (= contains InsideOfSphere)
+       (recur (rest planes) sphere)
+
+       :else ;; OutsideOfSphere
+       false))))
+
 (defn gl-render-mesh-or-display-list [^GL2 gl ^Object mesh]
   (if-let [^Integer display-list (get @display-lists (.hashCode mesh))]
     (.glCallList gl display-list)
@@ -320,11 +413,28 @@
         (let [[^float ex ey ez] (:eye camera)]
           (.glTranslatef gl (- ex) (- ey) (- ez)))
 
-        ;; (doseq [meshes-from-b3d objs]
-        ;;   (doseq [mesh meshes-from-b3d]
-        ;;     (gl-render-mesh gl mesh)))
-        (doseq [mesh objs]
-          (gl-render-mesh-or-display-list gl mesh))
+        (let [planes (create-frustum-planes
+                      (:angle @gl-context)
+                      (:aspect @gl-context)
+                      (:near-dist @gl-context)
+                      (:far-dist @gl-context)
+                      (:eye camera)
+                      (:dir camera)
+                      [0.0 1.0 0.0])
+              culled (reduce
+                      (fn [culled mesh]
+                        (if (sphere-in-planes planes (:bounding-sphere mesh))
+                          (do
+                            (gl-render-mesh-or-display-list gl mesh)
+                            culled)
+                          (+ 1 culled)))
+                      0 objs)]
+
+          (println
+           (format
+            "Culled %s out of %s (%s)"
+            culled (count objs) (* 100.0 (/ culled (count objs)))))
+          )
 
         (gl-draw-axis gl)
         (display-fps gl)))
@@ -340,7 +450,13 @@
 
         (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_PROJECTION)
         (.glLoadIdentity gl)
-        (.gluPerspective glu (Float. 25.0) aspect 10.0 600.0)
+        (.gluPerspective glu (Float. 25.0) aspect 10.0 300.0)
+
+        (dosync (ref-set gl-context (assoc @gl-context
+                                      :angle 25.0
+                                      :aspect aspect
+                                      :near-dist 10.0
+                                      :far-dist 300.0)))
 
         (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_MODELVIEW)
         (.gluLookAt glu

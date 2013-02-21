@@ -246,4 +246,4 @@
 
 (defn parse-file-from-string [^String s]
   (try (parse-file (java.io.File. s))
-       (catch Exception e {:errors (format "File not found %s" s)})))
+       (catch java.io.FileNotFoundException e {:errors (format "File not found %s" s)})))

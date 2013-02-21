@@ -2,6 +2,7 @@
   (:gen-class))
 
 (set! *warn-on-reflection* true)
+(set! *unchecked-math* true)
 
 (defrecord V3f [^float x ^float y ^float z])
 (defn v3f [x y z] (V3f. x y z))
@@ -89,6 +90,12 @@
 
 (defn vector-sub [v1 v2]
   (map - v1 v2))
+
+(defn vector-mult-scalar [v s]
+  (map #(* % s) v))
+
+(defn vector-inner-product [v1 v2]
+  (reduce + (map * v1 v2)))
 
 (defn vector-normalize [v1]
   (let [t ^Double (Math/sqrt (apply + (map #(* % %) v1)))]
