@@ -310,8 +310,6 @@
                              (get symbol-table (str "formcl" form-idx))
                              delta-start delta-end)
 
-          zzzz (println "Check" delta-start delta-end)
-
           prototype-roof-l (get symbol-table (str "roofl" roof-idx))
           prototype-roof-cl (transform-form-object
                              (get symbol-table (str "roofcl" roof-idx))
@@ -401,7 +399,7 @@
 (def context
   (create-geometries-for-blocks-in-context context1))
 
-(def context (assoc context :blocks (take 40 (:blocks context))))
+(def context (assoc context :blocks (take 500 (:blocks context))))
 (def objs (get-drawable-objects-in-context context))
 
 (def dummy 1)

@@ -5,7 +5,8 @@
    [opengl.route :as route]
    [opengl.models :as m]
    [opengl.geom :as geom]
-   [opengl.builder :as builder]]
+   [opengl.builder :as builder]
+   [opengl.simulation :as s]]
   [:import
    (javax.imageio ImageIO)
    (javax.swing JFrame)
@@ -16,14 +17,23 @@
    (com.jogamp.opengl.util.gl2 GLUT)]
   (:gen-class))
 
-
 (set! *warn-on-reflection* true)
 
 (def gl-context
-  (ref {:camera {:eye [20.0 20.0 -50.0]
-                 :center [0.0 0.0 50.0]}
+  (ref {:last-time (System/nanoTime)
         :meshes (to-array (flatten (filter identity objects/objs)))
+        :simulation-state (s/base-state)
     }))
+
+(defn- time-elapsed-seconds []
+  (let [cur-time (System/nanoTime)
+        last-time (or (:last-time @gl-context) cur-time)
+        diff (- cur-time last-time)]
+    (dosync
+     (ref-set
+      gl-context
+      (assoc @gl-context :last-time cur-time)))
+    (/ diff 1.0e9)))
 
 (def textures (ref {}))
 
@@ -213,6 +223,14 @@
 (def display-lists
   (ref {}))
 
+(defn gl-render-mesh [gl mesh]
+  (doseq [face (:faces mesh)]
+    (gl-preload-textures gl
+     (filter identity
+             (flatten
+              (map textures-in-vertex face))))
+    (gl-render-face gl face)))
+
 (defn gl-render-mesh-or-display-list [^GL2 gl ^Object mesh]
   (if-let [^Integer display-list (get @display-lists (.hashCode mesh))]
     (.glCallList gl display-list)
@@ -225,14 +243,6 @@
        (ref-set
         display-lists
         (assoc @display-lists (.hashCode mesh) display-list))))))
-
-(defn gl-render-mesh [gl mesh]
-  (doseq [face (:faces mesh)]
-    (gl-preload-textures gl
-     (filter identity
-             (flatten
-              (map textures-in-vertex face))))
-    (gl-render-face gl face)))
 
 (defn gl-draw-axis [^GL2 gl]
   (doto gl
@@ -284,19 +294,31 @@
       (let [^GL2 gl (.getGL drawable)
             ^GLUgl2 glu (GLUgl2.)
             context @gl-context
-            camera (:camera context)
+            sim (s/update-simulation
+                 objects/context
+                 (:simulation-state @gl-context)
+                 (time-elapsed-seconds))
+            camera (:camera sim)
             objs (:meshes context)]
+
+        (dosync
+         (ref-set gl-context
+                  (assoc @gl-context :simulation-state sim)))
 
         (.glClearColor gl (Float. 1.0) 1.0 1.0 1.0)
         (.glClear gl (bit-or GL/GL_COLOR_BUFFER_BIT GL/GL_DEPTH_BUFFER_BIT))
 
         (.glLoadIdentity gl)
-        (.gluPerspective glu (Float. 25.0) 1.0 10.0 600.0)
-        (apply glu-look-at
-               (concat [glu]
-                       (:eye camera) (:center camera) [0.0 1.0 0.0]))
+        ;(.gluPerspective glu (Float. 25.0) 1.0 10.0 600.0)
+        ;; (apply glu-look-at
+        ;;        (concat [glu]
+        ;;                [0.0 0.0 0.0] (:center camera) [0.0 1.0 0.0]))
 
-        (.glScalef gl (float -1.0) 1.0 1.0)
+        (.glScalef gl (float 1.0) 1.0 -1.0)
+
+        (.glRotatef gl (- (:rotate camera)) 0.0 1.0 0.0)
+        (let [[^float ex ey ez] (:eye camera)]
+          (.glTranslatef gl (- ex) (- ey) (- ez)))
 
         ;; (doseq [meshes-from-b3d objs]
         ;;   (doseq [mesh meshes-from-b3d]
@@ -316,9 +338,11 @@
 
         (.glViewport gl 0 0 w h)
 
-        (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_MODELVIEW)
+        (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_PROJECTION)
         (.glLoadIdentity gl)
         (.gluPerspective glu (Float. 25.0) aspect 10.0 600.0)
+
+        (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_MODELVIEW)
         (.gluLookAt glu
                     100.0 30.0 130.0  ; eye x,y,z
                     0.0 0.0 0.0     ; center x,y,z
@@ -351,14 +375,18 @@
     [canvas frame]))
 
 
-(defn set-looking-at [canvas ex ey ez]
+(defn set-looking-at [canvas x y z]
   (dosync
    (ref-set
     gl-context
     (let [context @gl-context
-          camera (:camera context)
-          updated-camera (assoc camera :eye [ex ey ez])]
-      (assoc context :camera updated-camera))))
+          sim-state (:simulation-state context)
+          camera (:camera sim-state)
+          updated-sim-state (assoc sim-state
+                              :camera
+                              (assoc camera
+                                :eye [x y z]))]
+      (assoc context :simulation-state updated-sim-state))))
   '())
 
 ;; (def canvas (first (make-canvas)))
@@ -370,14 +398,22 @@
    (ref-set
     gl-context
     (let [context @gl-context
-          camera (:camera context)
-          updated-camera (assoc camera :center [x y z])]
-      (assoc context :camera updated-camera))))
+          sim-state (:simulation-state context)
+          camera (:camera sim-state)
+          updated-sim-state (assoc sim-state
+                              :camera
+                              (assoc camera
+                                :center [x y z]))]
+      (assoc context :simulation-state updated-sim-state))))
   '())
 
-(defn -main [];;
+(defn -main []
+  (dosync (ref-set display-lists {}))
   (let [^GLCanvas canvas (first (make-canvas))
-        anim (FPSAnimator. canvas 10)]
+        anim (FPSAnimator. canvas 30)]
     (.start anim)
-    (set-center canvas 22.0 0.0 400)
-    (set-looking-at canvas 15.0 3.0 340.0)))
+    (dosync (ref-set gl-context
+                     (assoc @gl-context :simulation-state (s/base-state))))
+    ;(set-center canvas 22.0 0.0 400)
+    ;(set-looking-at canvas 15.0 3.0 340.0)
+    ))

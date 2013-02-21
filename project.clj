@@ -11,9 +11,11 @@
         opengl.opengl
         opengl.route
         opengl.objects
-        opengl.b3d]
+        opengl.b3d
+        opengl.simulation]
   :main opengl.opengl
-  ;:jvm-opts ["-agentlib:hprof=cpu=samples,file=/tmp/hprof.txt"]
+  ;:jvm-opts ["-agentlib:hprof=file=/tmp/hprof.txt"]
+  :jvm-opts ["-Xmx3G"]
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [org.clojars.toxi/jogl "2.0.0-rc10"]
                  ])
