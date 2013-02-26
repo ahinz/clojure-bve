@@ -85,6 +85,10 @@
         (v3f ux uy uz)
         (v3f dx dy dz)])))
 
+(defn transform-create-s
+  [yaw pitch roll scalar]
+  (transform-create (* yaw scalar) (* pitch scalar) (* roll scalar)))
+
 (defn vector-add [v1 v2]
   (map + v1 v2))
 

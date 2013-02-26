@@ -392,9 +392,10 @@
            (:prototype freeobj)
            position
            rail-transform
-           (geom/transform-create (:yaw freeobj)
-                                  (:pitch freeobj)
-                                  (:roll freeobj))
+           (geom/transform-create-s (:yaw freeobj)
+                                    (:pitch freeobj)
+                                    (:roll freeobj)
+                                    0.0174532925199433)
            track-pos)))
       (:freeobjs rail))
 
