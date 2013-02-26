@@ -344,12 +344,14 @@
       (let [[railidx x y railtyp] (split-body node)
             texture (symbol-from-context context "rail" railtyp)]
         (if texture
-          (if (get (:rails block) railidx)
+          (if (and (get (:rails block) railidx)
+                   (not (:rail-ends (get (:rails block) railidx))))
             (add-node-error block node :rail-already-started railidx)
             (assoc-in block [:rails railidx]
                       {:start [(float x) (float y)]
                        :end   [(float x) (float y)]
-                       :prototype texture }))
+                       :prototype texture
+                       :rail-ends false}))
           (add-node-error block node :symbol-not-found railidx type)))
 
       (is-type node "rail")
@@ -410,10 +412,28 @@
       (is-type node "sta")
       block ;; Ignored
 
+      (is-type node "poleend")
+      block ;; Ignored
+
       (is-type node "back")
       block ;; Ignored
 
       (is-type node "stop")
+      block ;; Ignored
+
+      (is-type node "signal")
+      block ;; Ignored
+
+      (is-type node "announce")
+      block ;; Ignored
+
+      (is-type node "marker")
+      block ;; Ignored
+
+      (is-type node "limit")
+      block ;; Ignored
+
+      (is-type node "crack")
       block ;; Ignored
 
       (is-type node "form")
