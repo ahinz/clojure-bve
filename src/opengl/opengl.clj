@@ -453,7 +453,7 @@
 
         (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_PROJECTION)
         (.glLoadIdentity gl)
-        (.gluPerspective glu (Float. 25.0) aspect 10.0 300.0)
+        (.gluPerspective glu (Float. 25.0) aspect 0.1 300.0)
 
         (dosync (ref-set gl-context (assoc @gl-context
                                       :angle 25.0
