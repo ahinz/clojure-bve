@@ -423,10 +423,10 @@
         [x y z] (player-position block)
         y (- y (:height block))]
     (if (> (count grounds) 0)
-      [(doall (create-transformed-object
-               (nth grounds (mod block-index (count grounds)))
-               [x y z]
-               ground-transform geom/identity-transform 0))]
+      [(create-transformed-object
+        (nth grounds (mod block-index (count grounds)))
+        [x y z]
+        ground-transform geom/identity-transform 0)]
       [])))
 
 (defn get-drawable-objects-in-block [context block]
