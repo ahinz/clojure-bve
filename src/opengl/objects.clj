@@ -413,8 +413,25 @@
     #(get-rail-aligned-objects-in-rail context block (second %))
     (:rails block))))
 
+(defn- player-position [block]
+  (:position (get (:rails block) 0)))
+
+(defn- get-ground-objects-in-block [context block]
+  (let [block-index (int (/ (:start-ref block) (:block-size context)))
+        grounds (:grounds block)
+        ground-transform (:ground-transform block)
+        [x y z] (player-position block)
+        y (- y (:height block))]
+    (if (> (count grounds) 0)
+      [(doall (create-transformed-object
+               (nth grounds (mod block-index (count grounds)))
+               [x y z]
+               ground-transform geom/identity-transform 0))]
+      [])))
+
 (defn get-drawable-objects-in-block [context block]
   (concat
+   (get-ground-objects-in-block context block)
    (get-rail-aligned-objects-in-block context block)
    (flatten
     (map #(create-form-object context block %)

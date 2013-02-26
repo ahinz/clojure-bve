@@ -196,8 +196,26 @@
    "roofl" "roofr" "roofcl" "roofcr"
    "crackl" "crackr" "freeobj" "beacon"])
 
+(defn- read-string-if-not-empty [^String s]
+  (if (= (count (.trim s)) 0) nil
+      (read-string s)))
+
+(defn- split-body [node]
+  (if (nil? node)
+    []
+    (map read-string-if-not-empty
+         (.split
+          (.trim ^String (trim-trailing-comma (:body node))) ";"))))
+
 (defn- strip-prefix-char [^String s]
   (if (= (first s) \/) (.substring s 1) s))
+
+(defn- parse-ground-node [context node]
+  (let [symbol-table (:symbol-table context)
+        indexes (split-body node)
+        prototypes (map #(get symbol-table (str "ground" %)) indexes)
+        gidx (:arg node)]
+    (assoc-in context [:grounds gidx] prototypes)))
 
 (defn parse-structure-node [context node]
   (if (some #{(:type node)} supported-structures)
@@ -260,22 +278,14 @@
    (= (:prefix node) "track")
    (parse-track-node context node)
 
+   (= (:prefix node) "cycle")
+   (parse-ground-node context node)
+
    :else
    (add-node-error context node :command-not-found)))
 
 (defn- parse-nodes-in-context [context]
   (reduce parse-node context (:nodes context)))
-
-(defn- read-string-if-not-empty [^String s]
-  (if (= (count (.trim s)) 0) nil
-      (read-string s)))
-
-(defn- split-body [node]
-  (if (nil? node)
-    []
-    (map read-string-if-not-empty
-         (.split
-          (.trim ^String (trim-trailing-comma (:body node))) ";"))))
 
 (defn begin-repeat [context node block railidx structidx dir key sym]
   (let [left-texture (symbol-from-context context (str key "l") structidx)
@@ -304,25 +314,27 @@
                   :right right-texture}))
       (add-node-error block node :rail-not-found railidx))))
 
-(defn- copy-rails [old-block new-block]
+(defn- copy-previous-data [old-block new-block]
   (assoc
-      new-block :rails
-      (if (:rails old-block)
-        (reduce (fn [rails [railidx rail]]
-                  (if (nil? (:end rail))
-                    (println "nil end on rail" railidx
-                             (dissoc rail :prototype :walls :freeobjs)))
-                  (if (:rail-ends rail)
-                    rails
-                    (assoc rails
-                      railidx
-                      (assoc rail
-                        :freeobjs []
-                        :start (:end rail)
-                        :end (:end rail)))))
-                {}
-                (:rails old-block))
-        {0 {:start [0.0 0.0] :end [0.0 0.0]}})))
+      new-block
+    :grounds (:grounds old-block)
+    :rails
+    (if (:rails old-block)
+      (reduce (fn [rails [railidx rail]]
+                (if (nil? (:end rail))
+                  (println "nil end on rail" railidx
+                           (dissoc rail :prototype :walls :freeobjs)))
+                (if (:rail-ends rail)
+                  rails
+                  (assoc rails
+                    railidx
+                    (assoc rail
+                      :freeobjs []
+                      :start (:end rail)
+                      :end (:end rail)))))
+              {}
+              (:rails old-block))
+      {0 {:start [0.0 0.0] :end [0.0 0.0]}})))
 
 (defn- parse-nodes-in-block [context block prev-block]
   (reduce
@@ -454,11 +466,12 @@
           (add-node-error block node :rail-not-found railidx)))
 
       (is-type node "ground")
-      (assoc block :ground (read-string (:body node)))
+      (assoc block :grounds (get (:grounds context)
+                                 (:body node)))
 
       :else
       (add-node-error block node :bad-track-command)))
-   (copy-rails prev-block (dissoc block :nodes))
+   (copy-previous-data prev-block (dissoc block :nodes))
    (:nodes block)))
 
 (defn- parse-nodes-in-blocks-in-context [context]
@@ -533,18 +546,14 @@
 (defn parse-route-string
   ([str file] (parse-route-string str file {}))
   ([str file rest]
-     (pull-rail-ends-in-context
-      (parse-nodes-in-blocks-in-context
-       (parse-nodes-in-context
-        (create-blocks-in-context
-         (associate-track-refs
-          (associate-with-blocks
-            (parse-string
-             str
-             (merge
-              {:block-size 25.0 :file file}
-              rest)
-             )))))))))
+     (->> (merge {:block-size 25.0 :file file} rest)
+          (parse-string str)
+          associate-with-blocks
+          associate-track-refs
+          create-blocks-in-context
+          parse-nodes-in-context
+          parse-nodes-in-blocks-in-context
+          pull-rail-ends-in-context)))
 
 (defn parse-route-file [^String file-path]
   (parse-route-string (slurp file-path) file-path))
