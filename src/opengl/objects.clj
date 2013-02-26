@@ -277,62 +277,92 @@
   (if (nil? form)
     []
     (let [symbol-table (:symbol-table context)
-
-          ;; position (:position block)
-          ;; direction (:direction block)
-          ;; [dir-x dir-y] direction
+          block-size (:block-size context)
+          next-block (nth (:blocks context)
+                          (+ 1
+                             (int
+                              (/ (:start-ref block)
+                                 block-size))))
 
           roof-idx (:roof-idx form)
           form-idx (:form-idx form)
 
-          rail1 (get (:rails block) (:rail1 form))
-          rail2 (get (:rails block) (:rail2 form))
+          railP0 (get (:rails block)      (:rail1 form))
+          railP1 (get (:rails next-block) (:rail1 form))
+          railS0 (get (:rails block)      (:rail2 form))
+          railS1 (get (:rails next-block) (:rail2 form))
 
-          rail-transform1 (:rail-transform rail1)
-          rail-transform2 (:rail-transform rail2)
+          p1 (:position railP0)
+          p2 (:position railS0)
 
-          [dx1 dy1] (:start rail1)
-          [dx2 dy2] (:start rail2)
+          rail-transform1 (:rail-transform railP0)
 
-          [dx1e _] (:end rail1)
-          [dx2e _] (:end rail2)
+          rail-label (:rail2 form)]
+      (cond
+       (or (= rail-label 'l) (= rail-label 'r))
+       (map #(create-transformed-object
+              (get symbol-table (str %1 rail-label %2))
+              p1 rail-transform1 geom/identity-transform 0)
+            ["form" "formc" "roof" "roofc"]
+            [form-idx form-idx roof-idx roof-idx])
 
-          dx1e (or dx1e dx1)
-          dx2e (or dx2e dx2)
-          delta-start (- dx2 dx1)
-          delta-end (- dx2e dx1e)
+       (= (:rail2 form) 0)
+       [(create-transformed-object
+         (get symbol-table (str "roofl" roof-idx))
+         p1 rail-transform1 geom/identity-transform 0)]
 
-          p1 (:position rail1)
-          p2 (:position rail2)
+       :else
+       (let
+           [px0 (first (:start railP0))
+            px1 (first (:end railP1))
 
-          prototype-form-l (get symbol-table (str "forml" form-idx))
-          prototype-form-cl (transform-form-object
-                             (get symbol-table (str "formcl" form-idx))
-                             delta-start delta-end)
+            sx0 (first (:start railS0))
+            sx1 (first (:end railS1))
 
-          prototype-roof-l (get symbol-table (str "roofl" roof-idx))
-          prototype-roof-cl (transform-form-object
-                             (get symbol-table (str "roofcl" roof-idx))
-                             delta-start delta-end)
+            d0 (- sx0 px0)
+            d1 (- sx0 px1)
 
-          prototype-sec-rail-form-r (get symbol-table (str "formr" form-idx))
-          prototype-sec-rail-roof-r (get symbol-table (str "roofr" roof-idx))
+            sfx (if (< d0 0.0) "l" "r")
 
-          prototypes-1 [prototype-form-l prototype-form-cl
-                        prototype-roof-l prototype-roof-cl]
+            static-form-key (str "form" sfx form-idx)
+            static-form-prototype (get symbol-table static-form-key)
+            static-form (create-transformed-object
+                         static-form-prototype
+                         p1 rail-transform1 geom/identity-transform 0)
 
-          prototypes-2 [prototype-sec-rail-form-r
-                        prototype-sec-rail-roof-r]
+            center-form-key (str "formc" sfx form-idx)
+            center-form-prototype (get symbol-table center-form-key)
 
-          renderer #(create-transformed-object
-                     %1 %2 %3 geom/identity-transform
-                     0) ; track position, un-used?
-          ]
-      (concat
-       (map #(renderer % p1 rail-transform1) (filter-not-nil prototypes-1))
-       (map #(renderer % p2 rail-transform2) (filter-not-nil prototypes-2)))
-      ))
-  )
+            tx-center-form-prototype (transform-form-object
+                                      center-form-prototype
+                                      d0 d1)
+            center-form (create-transformed-object
+                         tx-center-form-prototype
+                         p1 rail-transform1 geom/identity-transform 0)
+
+            ;; Roof
+            static-roof-key (str "roof" sfx roof-idx)
+            static-roof-prototype (get symbol-table static-roof-key)
+            static-roof (create-transformed-object
+                         static-roof-prototype
+                         p1 rail-transform1 geom/identity-transform 0)
+
+            center-roof-key (str "roofc" sfx roof-idx)
+            center-roof-prototype (get symbol-table center-roof-key)
+
+            tx-center-roof-prototype (transform-form-object
+                                      center-roof-prototype
+                                      d0 d1)
+            center-roof (create-transformed-object
+                         tx-center-roof-prototype
+                         p1 rail-transform1 geom/identity-transform 0)
+
+
+            ]
+         [static-form center-form static-roof center-roof])
+
+        ))))
+
 
 (defn- get-rail-aligned-objects-in-rail [context block rail]
   (let [[dx dy] (:start rail)
@@ -385,7 +415,9 @@
 (defn get-drawable-objects-in-block [context block]
   (concat
    (get-rail-aligned-objects-in-block context block)
-   (create-form-object context block (:form block))))
+   (flatten
+    (map #(create-form-object context block %)
+         (:forms block)))))
 
 (defn get-drawable-objects-in-context [context]
   (reduce (fn [objs block]

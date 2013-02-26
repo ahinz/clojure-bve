@@ -406,10 +406,12 @@
 
       (is-type node "form")
       (let [[r1 r2 roof-idx form-idx] (split-body node)]
-        (if (get (:rails block) r1)
-          (if (get (:rails block) r2)
-            (assoc block :form {:rail1 r1 :rail2 r2
-                                :roof-idx roof-idx :form-idx form-idx})
+        (if (or (= r1 'l) (= r1 'r) (= r1 0) (get (:rails block) r1))
+          (if (or (= r2 'l) (= r2 'r) (= r2 0) (get (:rails block) r2))
+            (assoc block :forms
+                   (conj (:forms block)
+                         {:rail1 r1 :rail2 r2
+                          :roof-idx roof-idx :form-idx form-idx}))
             (add-node-error block node :rail-not-found r2))
           (add-node-error block node :rail-not-found r1)))
 
@@ -438,9 +440,7 @@
       (is-type node "wallend")
       (let [railidx (read-string (:body node))]
         (if (get (:rails block) railidx)
-          (do
-            (println "Ending rail!" (:start-ref block) railidx)
-            (assoc-in block [:rails railidx :walls] {}))
+          (assoc-in block [:rails railidx :walls] {})
           (add-node-error block node :rail-not-found railidx)))
 
       (is-type node "dike")
@@ -468,8 +468,6 @@
                   context (assoc context :errors
                                  (concat (or (:errors context) []) (:errors block)))
                   block (dissoc block :errors)]
-              (println "walls"
-                       (map #(keys (:walls (second %))) (:rails block)))
               (assoc context :blocks
                      (conj (or (:blocks context) []) block))))
           (assoc context :blocks [])
