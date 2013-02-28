@@ -339,6 +339,33 @@
               (:rails old-block))
       {0 {:start [0.0 0.0] :end [0.0 0.0]}})))
 
+(def signal-aspects
+  {2  [[0 2] 0]
+   -2 [[0 4] 1]
+   3  [[0 2 4] 2]
+   4  [[0 1 2 4] 3]
+   -4 [[0 2 3 4] 4]
+   5  [[0 1 2 3 4] 5]
+   -5 [[0 2 3 4 5] 6]
+   6  [[0 1 2 3 4 5] 7]})
+
+(defn- create-section-for-signal [block node]
+  (let [[aspect-id _ x y yaw pitch roll] (split-body node)
+        x (or x 0.0)
+        y (or y 0.0)
+        yaw (* (or yaw 0.0) 0.0174532925199433)
+        pitch (* (or pitch 0.0) 0.0174532925199433)
+        roll (* (or roll 0.0) 0.0174532925199433)
+        [aspects compat] (get signal-aspects aspect-id)]
+    {:track-ref (:track-ref node)
+     :position [x y (- (:track-ref node) (:start-ref block))]
+     :yaw yaw
+     :pitch pitch
+     :roll roll
+     :apsects aspects
+     :compat compat
+     :visible (not= x 0.0)}))
+
 (defn- parse-nodes-in-block [context block prev-block]
   (reduce
    (fn [block node]
@@ -425,7 +452,10 @@
       block ;; Ignored
 
       (is-type node "signal")
-      block ;; Ignored
+      (update-in block [:sections]
+                 (fn [sections]
+                   (conj (or sections [])
+                         (create-section-for-signal block node))))
 
       (is-type node "announce")
       block ;; Ignored

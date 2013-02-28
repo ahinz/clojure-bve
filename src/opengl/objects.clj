@@ -100,6 +100,8 @@
           (geom/rotate-vector-2d
            direction (Math/cos a) (Math/sin a)))))))
 
+
+
 (defn- create-transforms-for-player-rail [block]
   {:planar 0.0
    :updown 0.0
@@ -413,8 +415,11 @@
     #(get-rail-aligned-objects-in-rail context block (second %))
     (:rails block))))
 
+(defn- player-rail [block]
+  (get (:rails block) 0))
+
 (defn- player-position [block]
-  (:position (get (:rails block) 0)))
+  (:position (player-rail block)))
 
 (defn- get-ground-objects-in-block [context block]
   (let [block-index (int (/ (:start-ref block) (:block-size context)))
@@ -429,10 +434,75 @@
         ground-transform geom/identity-transform 0)]
       [])))
 
+(defn- load-signal-object [signal_name]
+  (:meshes
+   (b3d/parse-file
+    (java.io.File. (str "compatibility/signals/" signal_name ".csv")))))
+
+(def signals-objects
+  [{0 (load-signal-object "signal_2_0")
+    2 (load-signal-object "signal_2a_2")}
+   {0 (load-signal-object "signal_2_0")
+    4 (load-signal-object "signal_2b_4")}
+   {0 (load-signal-object "signal_3_0")
+    2 (load-signal-object "signal_3_2")
+    4 (load-signal-object "signal_3_4")}
+   {0 (load-signal-object "signal_4_0")
+    1 (load-signal-object "signal_4a_1")
+    2 (load-signal-object "signal_4a_2")
+    4 (load-signal-object "signal_4a_4")}
+   {0 (load-signal-object "signal_4_0")
+    2 (load-signal-object "signal_4b_2")
+    3 (load-signal-object "signal_4b_3")
+    4 (load-signal-object "signal_4b_4")}
+   {0 (load-signal-object "signal_5_0")
+    1 (load-signal-object "signal_5a_1")
+    2 (load-signal-object "signal_5_2")
+    3 (load-signal-object "signal_5_3")
+    4 (load-signal-object "signal_5_4")}
+   {0 (load-signal-object "signal_5_0")
+    2 (load-signal-object "signal_5_2")
+    3 (load-signal-object "signal_5_3")
+    4 (load-signal-object "signal_5_4")
+    5 (load-signal-object "signal_5b_5")}
+   {0 (load-signal-object "signal_6_0")
+    1 (load-signal-object "signal_6_1")
+    2 (load-signal-object "signal_6_2")
+    3 (load-signal-object "signal_6_3")
+    4 (load-signal-object "signal_6_4")
+    5 (load-signal-object "signal_6_5")}
+   {0 (load-signal-object "repeatingsignal_0")
+    3 (load-signal-object "repeatingsignal_3")
+    4 (load-signal-object "repeatingsignal_4")}])
+
+(defn- get-signal-objects-in-block [context block]
+  (let [player-rail (player-rail block)
+        player-pos (player-position block)
+        rail-transform (:rail-transform player-rail)
+        sections (:sections block)]
+    (flatten
+     (doall (map
+       (fn [section]
+         (let [signals (nth signals-objects (:compat section))
+               position (rotate-free-obj
+                         rail-transform
+                         player-pos
+                         (:position section))]
+           (println "Position" position)
+           (create-transformed-object
+            (last (first signals))
+            position rail-transform
+            (geom/transform-create (:yaw section)
+                                   (:pitch section)
+                                   (:roll section))
+            0)))
+       sections)))))
+
 (defn get-drawable-objects-in-block [context block]
   (concat
    (get-ground-objects-in-block context block)
    (get-rail-aligned-objects-in-block context block)
+   (get-signal-objects-in-block context block)
    (flatten
     (map #(create-form-object context block %)
          (:forms block)))))
