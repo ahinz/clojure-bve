@@ -56,7 +56,7 @@
   (let [mesh (:active context)]
     (if mesh
       (assoc context
-        :meshes (cons (build-mesh mesh) (:meshes context))
+        :meshes (conj (or (:meshes context) []) (build-mesh mesh))
         :active {})
       context)))
 
