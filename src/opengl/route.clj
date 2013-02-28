@@ -8,7 +8,8 @@
 (set! *warn-on-reflection* true)
 
 (def errors
-  {:unknown-command "Could not parse command %s"
+  {:unsupported-limit-construct "Posts on limits are not supported (yet)"
+   :unknown-command "Could not parse command %s"
    :bad-line "Could not parse line"
    :bad-structure-command "Invalid command in structure"
    :option-not-yet-supported "This option is not yet supported"
@@ -31,17 +32,18 @@
 (defn- add-node-error [context node error-key & rest]
   (assoc
       context :errors
-      (conj (or (:erors context) [])
+      (conj (or (:errors context) [])
             {:linenum (:linenum node)
              :line (:line node)
              :file (:path context)
              :type (:type node)
+             :prefix (:prefix node)
              :error (apply format (concat [(get errors error-key)] rest))})))
 
 (defn- add-node-warning [context node error-key]
   (assoc
       context :errors
-      (conj (or (:erors context) [])
+      (conj (or (:errors context) [])
             {:linenum (:linenum node)
              :line (:line node)
              :file (:path context)
@@ -317,6 +319,7 @@
 (defn- copy-previous-data [old-block new-block]
   (assoc
       new-block
+    :speed (or (:speed old-block) 0)
     :grounds (:grounds old-block)
     :rails
     (if (:rails old-block)
@@ -430,11 +433,15 @@
       (is-type node "marker")
       block ;; Ignored
 
-      (is-type node "limit")
-      block ;; Ignored
-
       (is-type node "crack")
       block ;; Ignored
+
+      (is-type node "limit")
+      (let [[speed a b] (split-body node)]
+        (if (and (nil? a) (nil? b))
+          (assoc block :speed speed)
+          (add-node-error block node :unsupported-limit-construct))
+        )
 
       (is-type node "form")
       (let [[r1 r2 roof-idx form-idx] (split-body node)]
