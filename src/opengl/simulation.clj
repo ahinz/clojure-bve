@@ -4,6 +4,7 @@
    [opengl.geom :as geom]
    [opengl.util :as util]
    [opengl.models :as m]
+   [opengl.train :as train]
    [opengl.route :as route]]
   (:gen-class))
 
@@ -13,6 +14,9 @@
   {:camera {:eye [20.0 20.0 -50.0]
             :center [0.0 0.0 50.0]}
    :speed 16.2352 ; 2.2352 ; meters/sec
+   :train (train/parse-train-file "R44/train.dat")
+   :power-notch 0
+   :brake-notch 0
    :track-pos 0.0})
 
 (defn- camera-for-position [context track-pos]

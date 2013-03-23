@@ -167,5 +167,3 @@
 
 (defn parse-train-file [file-path]
   (parse-train-string (slurp file-path) file-path))
-
-(def q (parse-train-file "R44/train.dat"))
