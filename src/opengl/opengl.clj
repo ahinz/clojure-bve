@@ -6,6 +6,7 @@
    [opengl.models :as m]
    [opengl.geom :as geom]
    [opengl.builder :as builder]
+   [opengl.train as :train]
    [opengl.simulation :as s]]
   [:import
    (javax.imageio ImageIO)
@@ -24,6 +25,14 @@
         :meshes (to-array (flatten (filter identity objects/objs)))
         :simulation-state (s/base-state)
     }))
+
+(defn set-sim-var [k v]
+  (dosync
+   (ref-set gl-context
+            (assoc-in @gl-context [:simulation-state k] v))))
+
+(defn set-speed [v] (set-sim-var :speed v))
+(defn set-location [v] (set-sim-var :track-pos v))
 
 (defn- time-elapsed-seconds []
   (let [cur-time (System/nanoTime)
@@ -153,16 +162,13 @@
     (.glVertex3f gl x y z)))
 
 (defn- gl-set-blend-mode [^GL2 gl blend]
-  (when (not= (:last-blend @gl-context) blend)
-    (if blend
-      (if (= blend "additive")
-        (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE)
-        (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
-      (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))
-    (dosync
-     (ref-set
-      gl-context
-      (assoc @gl-context :last-blend blend)))))
+  (if (= blend "additive")
+    (do
+      (.glEnable gl GL/GL_BLEND)
+      (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE))
+    (do
+      (.glDisable gl GL/GL_BLEND)
+      (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))))
 
 (defn gl-render-face [^GL2 gl face]
   (let [material (:material face)
@@ -191,13 +197,12 @@
     ;(.glPolygonMode gl GL/GL_FRONT_AND_BACK GL2GL3/GL_FILL)
     ;(.glPolygonMode gl GL/GL_FRONT  GL2GL3/GL_FILL)
     ;(.glPolygonMode gl GL/GL_BACK  GL2GL3/GL_LINE)
-    (.glDisable gl GL/GL_BLEND)
 
     (.glBegin gl GL2/GL_POLYGON)
 
     (if (not uses-glow-attn)
-     (doseq [vert verts]
-       (gl-render-vertex gl vert)))
+      (doseq [vert verts]
+        (gl-render-vertex gl vert)))
 
     (.glEnd gl)
 
@@ -380,7 +385,7 @@
         (.glutBitmapString
          glut
          GLUT/BITMAP_TIMES_ROMAN_24
-         (format "FPS %2.2f" fps))
+         (format "FPS %2.2f Track Pos %s" fps (get-in @gl-context [:simulation-state :track-pos])))
         (.glPopMatrix gl)))
 
 (defn create-event-proxy [w h]
@@ -529,10 +534,15 @@
 (defn -main []
   (dosync (ref-set display-lists {}))
   (let [^GLCanvas canvas (first (make-canvas))
-        anim (FPSAnimator. canvas 60)]
+        anim (FPSAnimator. canvas 1)]
     (.start anim)
     (dosync (ref-set gl-context
                      (assoc @gl-context :simulation-state (s/base-state))))
     ;(set-center canvas 22.0 0.0 400)
     ;(set-looking-at canvas 15.0 3.0 340.0)
+
+    (set-speed 0)
+    ;(set-location 3560)
+    ;(set-location 4430)
+    (set-location 80)
     ))
