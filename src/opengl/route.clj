@@ -457,6 +457,7 @@
                    (conj (or sections [])
                          (create-section-for-signal block node))))
 
+      ;; TODO: Sound Support
       (is-type node "announce")
       block ;; Ignored
 
@@ -470,8 +471,7 @@
       (let [[speed a b] (split-body node)]
         (if (and (nil? a) (nil? b))
           (assoc block :speed speed)
-          (add-node-error block node :unsupported-limit-construct))
-        )
+          (add-node-error block node :unsupported-limit-construct)))
 
       (is-type node "form")
       (let [[r1 r2 roof-idx form-idx] (split-body node)]
