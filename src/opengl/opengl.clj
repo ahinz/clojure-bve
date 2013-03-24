@@ -6,11 +6,12 @@
    [opengl.models :as m]
    [opengl.geom :as geom]
    [opengl.builder :as builder]
-   [opengl.train as :train]
+   [opengl.train :as train]
    [opengl.simulation :as s]]
   [:import
    (javax.imageio ImageIO)
    (javax.swing JFrame)
+   (java.awt.event KeyListener)
    (javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2 TraceGL2 GLAutoDrawable)
    (javax.media.opengl.awt GLCanvas)
    (javax.media.opengl.glu.gl2 GLUgl2)
@@ -23,8 +24,14 @@
 (def gl-context
   (ref {:last-time (System/nanoTime)
         :meshes (to-array (flatten (filter identity objects/objs)))
+        :overlays {}
         :simulation-state (s/base-state)
     }))
+
+(defn map-ctxt [f]
+  (dosync
+   (ref-set gl-context
+            (f @gl-context))))
 
 (defn set-sim-var [k v]
   (dosync
@@ -34,15 +41,12 @@
 (defn set-speed [v] (set-sim-var :speed v))
 (defn set-location [v] (set-sim-var :track-pos v))
 
-(defn- time-elapsed-seconds []
+(defn- time-elapsed-seconds [ctxt]
   (let [cur-time (System/nanoTime)
-        last-time (or (:last-time @gl-context) cur-time)
+        last-time (or (:last-time ctxt) cur-time)
         diff (- cur-time last-time)]
-    (dosync
-     (ref-set
-      gl-context
-      (assoc @gl-context :last-time cur-time)))
-    (/ diff 1.0e9)))
+    [(assoc ctxt :last-time cur-time)
+     (/ diff 1.0e9)]))
 
 (def textures (ref {}))
 
@@ -368,6 +372,43 @@
 
 (def last-time-stamps (ref (repeat 30 0)))
 
+(def glut (GLUT.))
+
+(defn velocity-mph-fmt [v] (format "%.2f mph" (* 2.23694 v)))
+(defn velocity-kph-fmt [v] (format "%.2f kph" (* 3.6 v)))
+
+(defn add-overlay [ctxt overlay]
+  "Add an overlay to the overlay set.
+
+   If and overlay with the same name exists
+   replace it"
+  (assoc-in ctxt [:overlays (:name overlay)] (:render overlay)))
+
+(defn remove-overlay [ctxt overlay-name]
+  (println "Removing" overlay-name)
+  (update-in ctxt [:overlays] #(dissoc % overlay-name)))
+
+(defn has-overlay [ctxt overlay-name]
+  (not (nil? (get-in ctxt [:overlays overlay-name]))))
+
+(defn render-overlays [^GL2 gl ctxt]
+  (doseq [[name renderer] (:overlays ctxt)]
+    (renderer gl ctxt)))
+
+(defn- create-velocity-overlay [velocity-fmt name]
+  {:render
+   (fn [^GL2 gl context]
+     (.glPushMatrix gl)
+     (.glLoadIdentity gl)
+     (.glColor4f gl 0.0 0.0 1.0 1.0)
+     (.glWindowPos2i gl 40 70)
+     (.glutBitmapString
+      glut
+      GLUT/BITMAP_HELVETICA_12
+      (velocity-fmt (get-in context [:simulation-state :speed])))
+     (.glPopMatrix gl))
+   :name name})
+
 (defn- display-fps [^GL2 gl]
       (dosync
        (ref-set
@@ -388,22 +429,49 @@
          (format "FPS %2.2f Track Pos %s" fps (get-in @gl-context [:simulation-state :track-pos])))
         (.glPopMatrix gl)))
 
-(defn create-event-proxy [w h]
+(defn- rotate-velocity-overlay [ctxt]
+  (cond
+   (has-overlay ctxt "velocity-mph")
+   (-> ctxt
+       (remove-overlay "velocity-mph")
+       (add-overlay (create-velocity-overlay velocity-kph-fmt "velocity-kph")))
+
+   (has-overlay ctxt "velocity-kph")
+   (remove-overlay ctxt "velocity-kph")
+
+   :else
+   (add-overlay ctxt (create-velocity-overlay velocity-mph-fmt "velocity-mph"))))
+
+(def keymap
+  {\q s/incr-combined
+   \z s/decr-combined
+   \v rotate-velocity-overlay})
+
+
+(def key-event-proxy
+  (proxy [KeyListener] []
+    (keyPressed [evt]
+      (map-ctxt (get keymap (.getKeyChar evt) identity)))
+    (keyReleased [evt])
+    (keyTyped [evt])))
+
+(defn create-opengl-proxy [w h]
   (proxy [GLEventListener] []
     (display [^GLAutoDrawable drawable]
       (let [^GL2 gl (.getGL drawable)
             ^GLUgl2 glu (GLUgl2.)
-            context @gl-context
-            sim (s/update-simulation
-                 objects/context
-                 (:simulation-state @gl-context)
-                 (time-elapsed-seconds))
+            [context time-delta] (time-elapsed-seconds @gl-context)
+            context (s/update-simulation
+                     objects/context
+                     context
+                     time-delta)
+
+            sim (:simulation-state context)
             camera (:camera sim)
             objs (:meshes context)]
 
         (dosync
-         (ref-set gl-context
-                  (assoc @gl-context :simulation-state sim)))
+         (ref-set gl-context context))
 
         (.glClearColor gl (Float. 1.0) 1.0 1.0 1.0)
         (.glClear gl (bit-or GL/GL_COLOR_BUFFER_BIT GL/GL_DEPTH_BUFFER_BIT))
@@ -421,10 +489,10 @@
           (.glTranslatef gl (- ex) (- ey) (- ez)))
 
         (let [planes (create-frustum-planes
-                      (:angle @gl-context)
-                      (:aspect @gl-context)
-                      (:near-dist @gl-context)
-                      (:far-dist @gl-context)
+                      (:angle context)
+                      (:aspect context)
+                      (:near-dist context)
+                      (:far-dist context)
                       (:eye camera)
                       (:dir camera)
                       [0.0 1.0 0.0])
@@ -438,14 +506,16 @@
                            (+ 1 culled))))
                       0 objs)]
 
-          (println
-           (format
-            "Culled %s out of %s (%s)"
-            culled (count objs) (* 100.0 (/ culled (count objs)))))
+          ;; (println
+          ;;  (format
+          ;;   "Culled %s out of %s (%s)"
+          ;;   culled (count objs) (* 100.0 (/ culled (count objs)))))
           )
 
         (gl-draw-axis gl)
-        (display-fps gl)))
+        (render-overlays gl context)
+        (display-fps gl)
+        ))
     (displayChanged [drawable modeChanged deviceChanged] (println "DC"))
     (init [^GLAutoDrawable drawable]
       (.setGL drawable (DebugGL2. (.getGL drawable)))
@@ -492,7 +562,8 @@
         [w h] [500 500]]
     (do
       (.add content-pane canvas)
-      (.addGLEventListener canvas (create-event-proxy w h))
+      (.addGLEventListener canvas (create-opengl-proxy w h))
+      (.addKeyListener canvas key-event-proxy)
       (doto frame
         (.setSize w h)
         (.setVisible true)))
@@ -534,7 +605,7 @@
 (defn -main []
   (dosync (ref-set display-lists {}))
   (let [^GLCanvas canvas (first (make-canvas))
-        anim (FPSAnimator. canvas 1)]
+        anim (FPSAnimator. canvas 20)]
     (.start anim)
     (dosync (ref-set gl-context
                      (assoc @gl-context :simulation-state (s/base-state))))

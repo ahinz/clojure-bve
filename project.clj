@@ -4,6 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :aot [opengl.core
+        opengl.train
         opengl.builder
         opengl.util
         opengl.geom

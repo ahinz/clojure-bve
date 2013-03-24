@@ -18,6 +18,55 @@
    :power-notch 0
    :brake-notch 0
    :track-pos 0.0})
+(def kmh-in-mps 0.277778)
+
+(defn- next-speed [ctxt delta-time]
+  (cond
+   (> (get-in ctxt [:simulation-state :power-notch]) 0)
+   (let [spd (get-in ctxt [:simulation-state :speed])
+         accl-fns (get-in ctxt [:simulation-state :train :accl])
+         accl-fn (nth accl-fns (- (get-in ctxt [:simulation-state :power-notch]) 1))
+         accl (accl-fn spd)]
+     (+ spd (* accl delta-time kmh-in-mps)))
+
+   (> (get-in ctxt [:simulation-state :brake-notch]) 0)
+   (let [spd (get-in ctxt [:simulation-state :speed])
+         brake-notch (get-in ctxt [:simulation-state :brake-notch])
+         decl (* brake-notch 0.1)]
+     (max 0 (- spd (* decl delta-time))))
+
+   :else
+   (get-in ctxt [:simulation-state :speed])))
+
+(defn incr-power-notch [ctxt]
+  (assoc-in ctxt [:simulation-state :power-notch]
+            (min (+ 1 (get-in ctxt [:simulation-state :power-notch]))
+                 (get-in ctxt [:simulation-state :train :handle :power-notches]))))
+
+(defn decr-power-notch [ctxt]
+  (assoc-in ctxt [:simulation-state :power-notch]
+            (max (- (get-in ctxt [:simulation-state :power-notch]) 1)
+              0)))
+
+(defn incr-brake-notch [ctxt]
+  (assoc-in ctxt [:simulation-state :brake-notch]
+            (min (+ 1 (get-in ctxt [:simulation-state :brake-notch]))
+                 (get-in ctxt [:simulation-state :train :handle :brake-notches]))))
+
+(defn decr-brake-notch [ctxt]
+  (assoc-in ctxt [:simulation-state :brake-notch]
+            (max (- (get-in ctxt [:simulation-state :brake-notch]) 1)
+                 0)))
+
+(defn incr-combined [ctxt]
+  (if (= 0 (get-in ctxt [:simulation-state :brake-notch]))
+    (incr-power-notch ctxt)
+    (decr-brake-notch ctxt)))
+
+(defn decr-combined [ctxt]
+  (if (= 0 (get-in ctxt [:simulation-state :power-notch]))
+    (incr-brake-notch ctxt)
+    (decr-power-notch ctxt)))
 
 (defn- camera-for-position [context track-pos]
   (let [block-index (int (/ track-pos (:block-size context)))
@@ -45,11 +94,14 @@
      :dir (:direction block)
      :rotate (/ (* 180.0 (Math/atan2 dx dz)) Math/PI)}))
 
-(defn update-simulation [context state delta-time]
+(defn update-simulation [context sim-context delta-time]
   (let [block-size (:block-size context)
-        speed (:speed state)
-        pos (+ (:track-pos state) (* speed delta-time))]
+        speed (get-in sim-context [:simulation-state :speed])
+        upd-speed (next-speed sim-context delta-time)
+        pos (+ (get-in sim-context [:simulation-state :track-pos] ) (* speed delta-time))]
 
-    (assoc state
-      :camera (camera-for-position context pos)
-      :track-pos pos)))
+    (update-in sim-context [:simulation-state]
+               #(assoc %
+                  :speed upd-speed
+                  :camera (camera-for-position context pos)
+                  :track-pos pos))))
