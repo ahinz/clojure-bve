@@ -1,6 +1,7 @@
 (ns opengl.train
   [:require
    [opengl.core :as core]
+   [opengl.models :as m]
    [opengl.util :as util]
    [opengl.b3d :as b3d]]
   (:gen-class))
@@ -110,6 +111,25 @@
               :else (/ (* v1 a1 (Math/pow v2 (- e 1))) (Math/pow v e))))))
        accl-lines))
 
+(defn- parse-ini-format
+  [lines sections]
+  (if (> (count lines) 0)
+    (let [section (.toLowerCase (.substring (first lines) 1 (- (count (first lines)) 1)))
+          pred #(not (.startsWith % "["))
+          rest-of-lines (drop-while pred (rest lines))
+          lines-in-section (take-while pred (rest lines))]
+      (recur
+       rest-of-lines
+       (update-in sections [section]
+                  #(conj
+                    (or % [])
+                    (into {} (filter
+                              (fn [p] (= (count p) 2))
+                              (map (fn [s]
+                                     (into [] (.split s "=")))
+                                   lines-in-section)))))))
+    sections))
+
 (defn- parse-sections
   "Given a list of strings that looks like:
    #Section Title 1
@@ -137,7 +157,21 @@
        (assoc sections section lines-in-section)))
     sections))
 
-(defn parse-train-string [train file-name]
+(defn parse-panel-cfg [cstr file-path]
+  (let [lines (map #(.trim %) (.split cstr "\n"))
+        sections (parse-ini-format lines {})]
+    {:panel (m/create-material
+             (m/create-color-set nil [0.0 0.0 1.0])
+             (m/create-texture-set
+              (str file-path
+                   (get-in sections ["panel" 0 "Background"] "panel")
+                   ".bmp"))
+             {})}))
+
+(defn parse-panel-cfg-file [file-path file-name]
+  (parse-panel-cfg (slurp (str file-path file-name)) file-path))
+
+(defn parse-train-string [train]
   (let [lines (.split train "\n")
         version (first lines)
         sections (assoc
@@ -166,4 +200,4 @@
               (get sections "device"))}))
 
 (defn parse-train-file [file-path]
-  (parse-train-string (slurp file-path) file-path))
+  (parse-train-string (slurp file-path)))

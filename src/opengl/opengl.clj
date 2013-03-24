@@ -149,7 +149,7 @@
         existing-texture (get @textures texture-file)]
     {:gl-tid (if (or (nil? texture-file) existing-texture)
                existing-texture
-               (gl-mutable-load-and-save-single-texture gl texture-file))
+               (gl-mutable-load-and-save-single-texture gl texture-file (:transparent colors)))
      :color (:color colors)}))
 
 
@@ -163,7 +163,9 @@
     (when tcoord
       (.glTexCoord2f gl (first tcoord) (second tcoord)))
 
-    (.glVertex3f gl x y z)))
+    (if z
+      (.glVertex3f gl x y z)
+      (.glVertex2f gl x y))))
 
 (defn- gl-set-blend-mode [^GL2 gl blend]
   (if (= blend "additive")
@@ -373,6 +375,7 @@
 (def last-time-stamps (ref (repeat 30 0)))
 
 (def glut (GLUT.))
+(def ^GLUgl2 glu (GLUgl2.))
 
 (defn velocity-mph-fmt [v] (format "%.2f mph" (* 2.23694 v)))
 (defn velocity-kph-fmt [v] (format "%.2f kph" (* 3.6 v)))
@@ -428,6 +431,30 @@
          GLUT/BITMAP_TIMES_ROMAN_24
          (format "FPS %2.2f Track Pos %s" fps (get-in @gl-context [:simulation-state :track-pos])))
         (.glPopMatrix gl)))
+
+(defn- train-2d-controls-overlay [panel]
+  {:render
+   (fn [^GL2 gl context]
+     (let [w (:width context)
+           h (:height context)
+           verts [(m/create-vertex [0.0 0.0] [0.0 1.0])
+                  (m/create-vertex [0.0 h] [0.0 0.0])
+                  (m/create-vertex [w h] [1.0 0.0])
+                  (m/create-vertex [w 0.0] [1.0 1.0])]
+           face (m/create-face verts panel true)]
+       (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_PROJECTION)
+       (.glPushMatrix gl)
+       (.glLoadIdentity gl)
+       (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_MODELVIEW)
+       (.glPushMatrix gl)
+       (.glLoadIdentity gl)
+       (.gluOrtho2D glu (float 0.0) (float w) (float 0.0) (float h))
+       (gl-render-face gl face)
+       (.glPopMatrix gl)
+       (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_PROJECTION)
+       (.glPopMatrix gl)
+       (.glMatrixMode gl javax.media.opengl.fixedfunc.GLMatrixFunc/GL_MODELVIEW)))
+   :name "cab"})
 
 (defn- rotate-velocity-overlay [ctxt]
   (cond
@@ -531,6 +558,8 @@
         (.gluPerspective glu (Float. 25.0) aspect 0.1 300.0)
 
         (dosync (ref-set gl-context (assoc @gl-context
+                                      :width w
+                                      :height h
                                       :angle 25.0
                                       :aspect aspect
                                       :near-dist 10.0
@@ -553,6 +582,7 @@
 
                                         ;(gl-draw-axis gl)
         ))
+    ;;TODO: Need to update width and height in context
     (reshape [drawable x y width height] (println "RE"))))
 
 (defn make-canvas []
@@ -606,14 +636,12 @@
   (dosync (ref-set display-lists {}))
   (let [^GLCanvas canvas (first (make-canvas))
         anim (FPSAnimator. canvas 20)]
-    (.start anim)
-    (dosync (ref-set gl-context
-                     (assoc @gl-context :simulation-state (s/base-state))))
-    ;(set-center canvas 22.0 0.0 400)
-    ;(set-looking-at canvas 15.0 3.0 340.0)
+    (dosync
+     (let
+         [c (assoc @gl-context :simulation-state (s/base-state))
+          c (add-overlay c (train-2d-controls-overlay (get-in c [:simulation-state :train-viz :panel])))]
+       (ref-set gl-context c)))
 
     (set-speed 0)
-    ;(set-location 3560)
-    ;(set-location 4430)
-    (set-location 80)
-    ))
+    (set-location 10)
+    (.start anim)))

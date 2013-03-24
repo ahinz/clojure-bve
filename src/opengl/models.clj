@@ -85,6 +85,9 @@
 (defn create-material [colors textures blend-mode]
   (Material. colors textures blend-mode))
 
+(defn create-texture [t]
+  (Texture. t))
+
 (defn create-texture-set
   ([texture] (create-texture-set texture nil 0))
   ([day-texture night-texture pct-night-in-blend]

@@ -15,6 +15,7 @@
             :center [0.0 0.0 50.0]}
    :speed 16.2352 ; 2.2352 ; meters/sec
    :train (train/parse-train-file "R44/train.dat")
+   :train-viz (train/parse-panel-cfg-file "R44/" "panel.cfg")
    :power-notch 0
    :brake-notch 0
    :track-pos 0.0})
