@@ -161,7 +161,7 @@
   (let [lines (map #(.trim %) (.split cstr "\n"))
         sections (parse-ini-format lines {})]
     {:panel (m/create-material
-             (m/create-color-set nil [0.0 0.0 1.0])
+             (m/create-color-set nil [0 0 128])
              (m/create-texture-set
               (str file-path
                    (get-in sections ["panel" 0 "Background"] "panel")

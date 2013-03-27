@@ -103,7 +103,7 @@
    (bit-shift-left c3 8)
    c4))
 
-(defn bmp-data-into-array [metadata]
+(defn bmp-data-into-array [metadata transp-color]
   (let [color-table (:color-table metadata)
         depth (:color-depth metadata)
         buffer ^java.nio.ByteBuffer (bmp-buffer-at-data metadata)
@@ -117,7 +117,10 @@
          (aset-byte array (- arraysize 1 (+ x 3)) b1)
          (aset-byte array (- arraysize 1 (+ x 2)) b2)
          (aset-byte array (- arraysize 1 (+ x 1)) b3)
-         (aset-byte array (- arraysize 1 (+ x 0)) -127)))
+         (aset-byte array (- arraysize 1 (+ x 0)) -128 ;; (if (= transp-color [b3 b2 b1])
+                                                    ;; 0
+                                                    ;; -128)
+                    )))
 
      (= depth 8)
      (doseq [i (range (/ arraysize 4))]
@@ -147,5 +150,6 @@
      :else (throw (Exception. (str "Bad color depth " depth))))
     array))
 
-(defn bmp-data-into-buffer [metadata]
-  (java.nio.ByteBuffer/wrap (bmp-data-into-array metadata)))
+(defn bmp-data-into-buffer [metadata transp-color]
+  (if transp-color (println "Transp" transp-color))
+  (java.nio.ByteBuffer/wrap (bmp-data-into-array metadata transp-color)))

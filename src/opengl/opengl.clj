@@ -96,19 +96,19 @@
     (gl-bind-texture-to-buffer gl tid width height
                                (java.nio.ByteBuffer/wrap data))))
 
-(defn gl-bind-texture-to-bmp [gl tid bmp]
+(defn gl-bind-texture-to-bmp [gl tid bmp transp-color]
   (let [meta (core/bmp-meta-read-file bmp)]
     (gl-bind-texture-to-buffer gl
                              tid
                              (:width meta)
                              (:height meta)
-                             (core/bmp-data-into-buffer meta))))
+                             (core/bmp-data-into-buffer meta transp-color))))
 
-(defn gl-bind-texture-to-file [gl tid ^String file]
+(defn gl-bind-texture-to-file [gl tid ^String file transp-color]
   (println "Loading texture" file "in to gl texture slot" tid)
   (cond
    (.endsWith file ".bmp")
-   (gl-bind-texture-to-bmp gl tid file)
+   (gl-bind-texture-to-bmp gl tid file transp-color)
 
    (.endsWith file ".png")
    (gl-bind-texture-to-png gl tid file)
@@ -128,13 +128,14 @@
 (defn gl-disable-texture [^GL2 gl]
   (.glDisable gl GL/GL_TEXTURE_2D))
 
-(defn gl-load-single-texture [gl file]
+(defn gl-load-single-texture [gl file transp-color]
   (gl-bind-texture-to-file gl
                             (gl-create-texture gl)
-                            file))
+                            file
+                            transp-color))
 
-(defn gl-mutable-load-and-save-single-texture [gl file]
-  (let [t (gl-load-single-texture gl file)]
+(defn gl-mutable-load-and-save-single-texture [gl file transp-color]
+  (let [t (gl-load-single-texture gl file transp-color)]
     (dosync
      (ref-set textures
               (assoc @textures file t))) t))
@@ -167,20 +168,29 @@
       (.glVertex3f gl x y z)
       (.glVertex2f gl x y))))
 
-(defn- gl-set-blend-mode [^GL2 gl blend]
-  (if (= blend "additive")
-    (do
-      (.glEnable gl GL/GL_BLEND)
-      (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE))
-    (do
-      (.glDisable gl GL/GL_BLEND)
-      (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))))
+(defn- gl-set-blend-mode [^GL2 gl blend istransp]
+  (cond
+   (= blend "additive")
+   (do
+     (.glEnable gl GL/GL_BLEND)
+     (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE))
+
+   (not (nil? istransp))
+   (do
+     (.glEnable gl GL/GL_BLEND)
+     (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE_MINUS_SRC_ALPHA))
+
+   :else
+   (do
+     (.glDisable gl GL/GL_BLEND)
+     (.glBlendFunc gl GL/GL_ONE GL/GL_ZERO))))
 
 (defn gl-render-face [^GL2 gl face]
   (let [material (:material face)
         blend-mode (:blend-mode material)
         texture-info (mutable-create-or-get-texture-for-material gl material)
         color (:color (:color-set material))
+        transp (:transparent (:color-set material))
         verts (:verts face)
         uses-glow-attn (:mode (:glow blend-mode))]
 
@@ -188,7 +198,7 @@
       (gl-enable-texture-2d gl)
       (gl-bind-current-texture gl texture-info))
 
-    (gl-set-blend-mode gl (:mode blend-mode))
+    (gl-set-blend-mode gl (:mode blend-mode) transp)
 
     (if color
       (let [[r g b] color]
