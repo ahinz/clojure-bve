@@ -11,7 +11,7 @@
   [:import
    (javax.imageio ImageIO)
    (javax.swing JFrame)
-   (java.awt.event KeyListener)
+   (java.awt.event KeyListener KeyEvent)
    (javax.media.opengl GLCapabilities GLDrawableFactory GLProfile GLEventListener GL GL2 GL2GL3 DebugGL2 TraceGL2 GLAutoDrawable)
    (javax.media.opengl.awt GLCanvas)
    (javax.media.opengl.glu.gl2 GLUgl2)
@@ -384,7 +384,7 @@
 
 (def last-time-stamps (ref (repeat 30 0)))
 
-(def glut (GLUT.))
+(def ^GLUT glut (GLUT.))
 (def ^GLUgl2 glu (GLUgl2.))
 
 (defn velocity-mph-fmt [v] (format "%.2f mph" (* 2.23694 v)))
@@ -487,7 +487,7 @@
 
 (def key-event-proxy
   (proxy [KeyListener] []
-    (keyPressed [evt]
+    (keyPressed [^KeyEvent evt]
       (map-ctxt (get keymap (.getKeyChar evt) identity)))
     (keyReleased [evt])
     (keyTyped [evt])))
