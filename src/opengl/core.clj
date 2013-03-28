@@ -117,10 +117,10 @@
          (aset-byte array (- arraysize 1 (+ x 3)) b1)
          (aset-byte array (- arraysize 1 (+ x 2)) b2)
          (aset-byte array (- arraysize 1 (+ x 1)) b3)
-         (aset-byte array (- arraysize 1 (+ x 0)) -128 ;; (if (= transp-color [b3 b2 b1])
-                                                    ;; 0
-                                                    ;; -128)
-                    )))
+         (aset-byte array (- arraysize 1 (+ x 0)) (if (= transp-color [b3 b2 b1])
+                                                    0
+                                                    -1 ; Unsigned value-> 255
+                                                    ))))
 
      (= depth 8)
      (doseq [i (range (/ arraysize 4))]
